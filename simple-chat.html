@@ -81,6 +81,13 @@
             cursor: not-allowed;
         }
 
+        .encryption-info {
+            text-align: center;
+            font-size: 14px;
+            color: #555;
+            margin-top: -15px;
+        }
+
         .chat-screen {
             display: none;
             flex-direction: column;
@@ -128,56 +135,73 @@
 
         .chat-messages {
             flex: 1;
-            padding: 20px;
+            padding: 5px;
+            padding-bottom: 100px;
             overflow-y: auto;
+            overflow-x: hidden;
             background: #000;
         }
 
         .message {
-            margin-bottom: 16px;
-            max-width: 70%;
+            padding: 1px 1px;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: baseline;
+            gap: 1ch;
+            line-height: 1.375rem;
+            word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: break-word;
         }
 
-        .message.own {
-            margin-left: auto;
+        .message:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
 
-        .message-header {
+        .message-time {
             font-size: 12px;
             color: #666;
-            margin-bottom: 4px;
+            font-weight: 500;
+            min-width: 60px;
+            text-align: right;
         }
 
-        .message-text {
-            padding: 12px 16px;
-            border-radius: 8px;
-            line-height: 1.4;
+        .message-author {
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            cursor: pointer;
         }
 
-        .message.own .message-text {
-            background: #ff4444;
+        .message.own .message-author {
             color: #fff;
         }
 
-        .message:not(.own) .message-text {
-            background: #111;
-            color: #fff;
+        .message-content {
+            font-size: 16px;
+            color: #b9bbbe;
+            flex: 1;
+            word-wrap: break-word;
+            white-space: pre-wrap;
         }
 
-        .message.system .message-text {
-            background: transparent;
+        .message.system {
+            justify-content: center;
             color: #666;
-            text-align: center;
             font-style: italic;
-            padding: 8px;
+            font-size: 14px;
         }
 
         .chat-input-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
             padding: 20px;
-            background: #111;
-            border-top: 1px solid #333;
+            background: transparent;
             display: flex;
             gap: 12px;
+            z-index: 10;
         }
 
         .chat-input {
@@ -190,6 +214,16 @@
             font-size: 16px;
             outline: none;
             transition: border-color 0.2s;
+            resize: none;
+            font-family: inherit;
+            min-height: 44px;
+            max-height: 200px;
+            overflow-y: hidden;
+        }
+
+        /* Hide scrollbar for textarea */
+        .chat-input::-webkit-scrollbar {
+            display: none;
         }
 
         .chat-input:focus {
@@ -246,9 +280,10 @@
         <!-- Setup Screen -->
         <div id="setup-screen" class="setup-screen">
             <div class="setup-form">
-                <input type="text" id="room-input" class="input-field" placeholder="Room name" maxlength="50" autocomplete="off">
-                <input type="text" id="display-name-input" class="input-field" placeholder="Your name" maxlength="30" autocomplete="off">
+                <input type="text" id="room-input" class="input-field" placeholder="Room name / Key" maxlength="50" autocomplete="off">
+                <input type="text" id="display-name-input" class="input-field" placeholder="Your name (optional)" maxlength="30" autocomplete="off">
                 <button id="join-btn" class="connect-btn" disabled>Connect</button>
+                <div class="encryption-info">AES-256 Encrypted</div>
                 <div class="status" id="setup-status"></div>
             </div>
         </div>
@@ -268,7 +303,7 @@
             </div>
             
             <div class="chat-input-container">
-                <input type="text" id="message-input" class="chat-input" placeholder="Type a message..." maxlength="500" autocomplete="off">
+                <textarea id="message-input" class="chat-input" placeholder="Message" maxlength="10000" autocomplete="off" rows="1"></textarea>
                 <button id="send-btn" class="send-btn">Send</button>
             </div>
         </div>
@@ -487,11 +522,11 @@
 
         // Join room function
         async function joinRoom() {
-            const room = roomInput.value.trim();
-            const name = displayNameInput.value.trim();
+            const room = formatName(roomInput.value);
+            const name = displayNameInput.value.trim() ? formatName(displayNameInput.value) : '';
 
-            if (!room || !name) {
-                setupStatus.textContent = 'Please enter both room name and display name';
+            if (!room) {
+                setupStatus.textContent = 'Please enter a room name';
                 setupStatus.style.color = '#e74c3c';
                 return;
             }
@@ -507,11 +542,11 @@
                     setupScreen.style.display = 'none';
                     chatScreen.style.display = 'flex';
                     currentRoomSpan.textContent = room;
-                    currentUserSpan.textContent = name;
-                    messageInput.focus();
+                    currentUserSpan.textContent = name || 'Anonymous';
                     
-                    addSystemMessage(`Connected to room "${room}"`);
-                    addSystemMessage('Broadcasting to other open tabs/windows...');
+                    // Update placeholder with room name
+                    messageInput.placeholder = `Message ${room}`;
+                    messageInput.focus();
                 }
 
             } catch (error) {
@@ -527,6 +562,23 @@
 
             await chat.sendMessage(text);
             messageInput.value = '';
+            autoResizeTextarea(); // Reset height after sending
+        }
+
+        // Auto-resize textarea function
+        function autoResizeTextarea() {
+            messageInput.style.height = '44px'; // Reset to minimum height
+            const scrollHeight = messageInput.scrollHeight;
+            const maxHeight = 200; // Match CSS max-height
+            messageInput.style.height = Math.min(scrollHeight, maxHeight) + 'px';
+        }
+
+        // Format name function: convert spaces to dashes, capitalize first letter, lowercase rest
+        function formatName(name) {
+            return name.trim()
+                .replace(/\s+/g, '-') // Replace spaces with dashes
+                .toLowerCase() // Make everything lowercase
+                .replace(/^./, char => char.toUpperCase()); // Capitalize first character
         }
 
         // Leave room function
@@ -545,13 +597,12 @@
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isOwn ? 'own' : ''}`;
             
-            const time = new Date(timestamp).toLocaleTimeString();
+            const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const displayName = sender || 'Anonymous';
             messageDiv.innerHTML = `
-                <div class="message-header">
-                    <span class="sender">${sender}</span>
-                    <span class="timestamp">${time}</span>
-                </div>
-                <div class="message-text">${text}</div>
+                <span class="message-time">${time}</span>
+                <span class="message-author">${displayName}</span>
+                <span class="message-content">${text}</span>
             `;
             
             chatMessages.appendChild(messageDiv);
@@ -562,7 +613,7 @@
         function addSystemMessage(text) {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message system';
-            messageDiv.innerHTML = `<div class="message-text">${text}</div>`;
+            messageDiv.innerHTML = `<span class="message-content">${text}</span>`;
             
             chatMessages.appendChild(messageDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -576,8 +627,7 @@
         // Function to update join button state
         function updateJoinButtonState() {
             const roomName = roomInput.value.trim();
-            const userName = displayNameInput.value.trim();
-            joinBtn.disabled = !roomName || !userName;
+            joinBtn.disabled = !roomName;
         }
 
         // Event listeners
@@ -586,10 +636,21 @@
         joinBtn.addEventListener('click', joinRoom);
         leaveBtn.addEventListener('click', leaveRoom);
         sendBtn.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keypress', (e) => {
+        
+        // Handle textarea input and auto-resize
+        messageInput.addEventListener('input', autoResizeTextarea);
+        
+        // Handle key presses for Discord-like behavior
+        messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault();
-                sendMessage();
+                if (e.shiftKey) {
+                    // Shift+Enter: Allow new line (default behavior)
+                    return;
+                } else {
+                    // Enter alone: Send message
+                    e.preventDefault();
+                    sendMessage();
+                }
             }
         });
 
