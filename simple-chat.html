@@ -319,6 +319,7 @@
                 this.messages = [];
                 this.broadcastChannel = null;
                 this.messageId = 0;
+                this.historyRequesterId = null;
             }
 
             // Generate encryption key from room name
@@ -385,6 +386,7 @@
                 this.displayName = displayName;
                 this.roomKey = await this.deriveKey(roomName);
                 this.messages = [];
+                this.historyReceived = false; // Flag to accept only first history response
 
                 // Create broadcast channel for same-browser communication
                 this.broadcastChannel = new BroadcastChannel(`localchat_${roomName}`);
@@ -403,6 +405,11 @@
                         }
                     }
                 });
+
+                // Request chat history after a brief delay to allow connections to establish
+                setTimeout(() => {
+                    this.requestHistory();
+                }, 500);
 
                 return true;
             }
@@ -451,7 +458,9 @@
 
             // Handle incoming messages
             async handleMessage(data) {
-                if (data.type === 'message' && data.sender !== this.displayName && data.room === this.currentRoom) {
+                if (data.room !== this.currentRoom) return;
+
+                if (data.type === 'message' && data.sender !== this.displayName) {
                     // Decrypt the message
                     const decryptedText = await this.decrypt(data.encrypted);
                     if (decryptedText) {
@@ -463,6 +472,94 @@
                             isOwn: false
                         });
                     }
+                } else if (data.type === 'history_request' && data.sender !== this.historyRequesterId) {
+                    // Someone is requesting chat history (not us)
+                    this.sendHistoryResponse(data.sender);
+                } else if (data.type === 'history_response' && data.target === this.historyRequesterId && !this.historyReceived) {
+                    // We received history response (accept first one only)
+                    this.historyReceived = true;
+                    await this.processHistoryResponse(data.messages);
+                }
+            }
+
+            // Request chat history when joining a room
+            async requestHistory() {
+                if (!this.currentRoom) return;
+
+                // Use displayName or generate anonymous ID for history requests
+                const requesterId = this.displayName || `Anonymous_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                
+                // Store the requester ID so we can match responses
+                this.historyRequesterId = requesterId;
+
+                const historyRequest = {
+                    type: 'history_request',
+                    room: this.currentRoom,
+                    sender: requesterId,
+                    timestamp: Date.now()
+                };
+
+                // Broadcast history request
+                this.broadcastChannel.postMessage(historyRequest);
+                localStorage.setItem(`localchat_broadcast_${this.currentRoom}`, JSON.stringify(historyRequest));
+                
+                setTimeout(() => {
+                    if (localStorage.getItem(`localchat_broadcast_${this.currentRoom}`) === JSON.stringify(historyRequest)) {
+                        localStorage.removeItem(`localchat_broadcast_${this.currentRoom}`);
+                    }
+                }, 100);
+            }
+
+            // Send history response to a requesting user
+            async sendHistoryResponse(requesterName) {
+                if (!this.currentRoom || this.messages.length === 0) return;
+
+                // Get recent messages (last 50 or all if fewer)
+                const recentMessages = this.messages
+                    .slice(-50)
+                    .map(msg => ({
+                        id: msg.id,
+                        sender: msg.sender,
+                        text: msg.text,
+                        timestamp: msg.timestamp
+                    }));
+
+                const historyResponse = {
+                    type: 'history_response',
+                    room: this.currentRoom,
+                    sender: this.displayName,
+                    target: requesterName,
+                    messages: recentMessages,
+                    timestamp: Date.now()
+                };
+
+                // Send encrypted history
+                this.broadcastChannel.postMessage(historyResponse);
+                localStorage.setItem(`localchat_broadcast_${this.currentRoom}`, JSON.stringify(historyResponse));
+                
+                setTimeout(() => {
+                    if (localStorage.getItem(`localchat_broadcast_${this.currentRoom}`) === JSON.stringify(historyResponse)) {
+                        localStorage.removeItem(`localchat_broadcast_${this.currentRoom}`);
+                    }
+                }, 100);
+            }
+
+            // Process received history
+            async processHistoryResponse(messages) {
+                if (!messages || messages.length === 0) return;
+
+                // Sort messages by timestamp to ensure correct order
+                const sortedMessages = messages.sort((a, b) => a.timestamp - b.timestamp);
+
+                // Add each message to local storage
+                for (const message of sortedMessages) {
+                    this.addLocalMessage({
+                        id: message.id,
+                        sender: message.sender,
+                        text: message.text,
+                        timestamp: message.timestamp,
+                        isOwn: message.sender === this.displayName
+                    });
                 }
             }
 
@@ -490,6 +587,8 @@
                 this.displayName = '';
                 this.roomKey = null;
                 this.messages = [];
+                this.historyReceived = false;
+                this.historyRequesterId = null;
             }
 
             // Get all messages
