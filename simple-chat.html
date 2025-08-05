@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Network Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .setup-screen {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+        }
+
+        .chat-screen {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .join-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .join-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+
+        .join-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .chat-header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+        }
+
+        .room-name {
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+
+        .leave-btn {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .leave-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .chat-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: calc(100vh - 250px);
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 15px;
+            border-radius: 10px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .message.own {
+            background: #667eea;
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.other {
+            background: #f1f3f4;
+            color: #333;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-header {
+            font-size: 0.85em;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        .message-text {
+            line-height: 1.4;
+        }
+
+        .chat-input-container {
+            padding: 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        .chat-input:focus {
+            border-color: #667eea;
+        }
+
+        .send-btn {
+            padding: 12px 25px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .send-btn:hover {
+            background: #5a6fd8;
+        }
+
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Scrollbar styling */
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏠 Local Network Chat</h1>
+            <p>Simple broadcast chat on your local network</p>
+        </div>
+
+        <!-- Setup Screen -->
+        <div id="setup-screen" class="setup-screen">
+            <div class="form-group">
+                <label for="room-input">Room Name:</label>
+                <input type="text" id="room-input" placeholder="Enter room name (e.g., 'test')" maxlength="50" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label for="display-name-input">Display Name:</label>
+                <input type="text" id="display-name-input" placeholder="Your display name" maxlength="30" autocomplete="off">
+            </div>
+            <button id="join-btn" class="join-btn" disabled>Join Room</button>
+            <div class="status" id="setup-status"></div>
+        </div>
+
+        <!-- Chat Screen -->
+        <div id="chat-screen" class="chat-screen">
+            <div class="chat-header">
+                <div class="room-name" id="current-room"></div>
+                <button id="leave-btn" class="leave-btn">Leave Room</button>
+            </div>
+
+            <div class="chat-container">
+                <div class="chat-messages" id="chat-messages">
+                    <!-- Messages will appear here -->
+                </div>
+                
+                <div class="chat-input-container">
+                    <input type="text" id="message-input" class="chat-input" placeholder="Type your message..." maxlength="500" autocomplete="off">
+                    <button id="send-btn" class="send-btn">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simple P2P Chat API - Everyone is host and client
+        class LocalNetworkChat {
+            constructor() {
+                this.currentRoom = '';
+                this.displayName = '';
+                this.roomKey = null;
+                this.messages = [];
+                this.broadcastChannel = null;
+                this.messageId = 0;
+            }
+
+            // Generate encryption key from room name
+            async deriveKey(roomName) {
+                const encoder = new TextEncoder();
+                const keyMaterial = await crypto.subtle.importKey(
+                    'raw',
+                    encoder.encode(roomName),
+                    'PBKDF2',
+                    false,
+                    ['deriveBits', 'deriveKey']
+                );
+
+                return await crypto.subtle.deriveKey(
+                    {
+                        name: 'PBKDF2',
+                        salt: encoder.encode('localchat2024salt'),
+                        iterations: 100000,
+                        hash: 'SHA-256'
+                    },
+                    keyMaterial,
+                    { name: 'AES-GCM', length: 256 },
+                    false,
+                    ['encrypt', 'decrypt']
+                );
+            }
+
+            // Encrypt message
+            async encrypt(text) {
+                const encoder = new TextEncoder();
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                
+                const encrypted = await crypto.subtle.encrypt(
+                    { name: 'AES-GCM', iv },
+                    this.roomKey,
+                    encoder.encode(text)
+                );
+
+                return {
+                    iv: Array.from(iv),
+                    encrypted: Array.from(new Uint8Array(encrypted))
+                };
+            }
+
+            // Decrypt message
+            async decrypt(encryptedData) {
+                try {
+                    const decrypted = await crypto.subtle.decrypt(
+                        { name: 'AES-GCM', iv: new Uint8Array(encryptedData.iv) },
+                        this.roomKey,
+                        new Uint8Array(encryptedData.encrypted)
+                    );
+                    
+                    return new TextDecoder().decode(decrypted);
+                } catch (error) {
+                    console.error('Decryption failed:', error);
+                    return null;
+                }
+            }
+
+            // Join a room
+            async joinRoom(roomName, displayName) {
+                this.currentRoom = roomName;
+                this.displayName = displayName;
+                this.roomKey = await this.deriveKey(roomName);
+                this.messages = [];
+
+                // Create broadcast channel for same-browser communication
+                this.broadcastChannel = new BroadcastChannel(`localchat_${roomName}`);
+                this.broadcastChannel.onmessage = (event) => {
+                    this.handleMessage(event.data);
+                };
+
+                // Listen for localStorage changes (cross-tab communication)
+                window.addEventListener('storage', (e) => {
+                    if (e.key === `localchat_broadcast_${roomName}` && e.newValue) {
+                        try {
+                            const data = JSON.parse(e.newValue);
+                            this.handleMessage(data);
+                        } catch (error) {
+                            console.error('Error parsing storage message:', error);
+                        }
+                    }
+                });
+
+                return true;
+            }
+
+            // Send a message
+            async sendMessage(text) {
+                const messageId = `${this.displayName}_${Date.now()}_${++this.messageId}`;
+                const timestamp = Date.now();
+                
+                // Encrypt the message
+                const encryptedData = await this.encrypt(text);
+                
+                const message = {
+                    id: messageId,
+                    room: this.currentRoom,
+                    sender: this.displayName,
+                    encrypted: encryptedData,
+                    timestamp: timestamp,
+                    type: 'message'
+                };
+
+                // Broadcast to same browser (BroadcastChannel)
+                this.broadcastChannel.postMessage(message);
+
+                // Broadcast to other tabs/windows (localStorage)
+                localStorage.setItem(`localchat_broadcast_${this.currentRoom}`, JSON.stringify(message));
+                
+                // Clear localStorage after short delay to allow other tabs to read it
+                setTimeout(() => {
+                    if (localStorage.getItem(`localchat_broadcast_${this.currentRoom}`) === JSON.stringify(message)) {
+                        localStorage.removeItem(`localchat_broadcast_${this.currentRoom}`);
+                    }
+                }, 100);
+
+                // Add to local messages immediately
+                this.addLocalMessage({
+                    id: messageId,
+                    sender: this.displayName,
+                    text: text,
+                    timestamp: timestamp,
+                    isOwn: true
+                });
+
+                return messageId;
+            }
+
+            // Handle incoming messages
+            async handleMessage(data) {
+                if (data.type === 'message' && data.sender !== this.displayName && data.room === this.currentRoom) {
+                    // Decrypt the message
+                    const decryptedText = await this.decrypt(data.encrypted);
+                    if (decryptedText) {
+                        this.addLocalMessage({
+                            id: data.id,
+                            sender: data.sender,
+                            text: decryptedText,
+                            timestamp: data.timestamp,
+                            isOwn: false
+                        });
+                    }
+                }
+            }
+
+            // Add message to local storage
+            addLocalMessage(message) {
+                // Check if message already exists (prevent duplicates)
+                if (this.messages.find(m => m.id === message.id)) {
+                    return;
+                }
+
+                this.messages.push(message);
+                
+                // Trigger UI update
+                if (this.onMessage) {
+                    this.onMessage(message);
+                }
+            }
+
+            // Leave room
+            leaveRoom() {
+                if (this.broadcastChannel) {
+                    this.broadcastChannel.close();
+                }
+                this.currentRoom = '';
+                this.displayName = '';
+                this.roomKey = null;
+                this.messages = [];
+            }
+
+            // Get all messages
+            getMessages() {
+                return this.messages;
+            }
+
+            // Set message callback
+            onMessage(callback) {
+                this.onMessage = callback;
+            }
+        }
+
+        // Initialize chat API
+        const chat = new LocalNetworkChat();
+
+        // DOM elements
+        const setupScreen = document.getElementById('setup-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const roomInput = document.getElementById('room-input');
+        const displayNameInput = document.getElementById('display-name-input');
+        const joinBtn = document.getElementById('join-btn');
+        const setupStatus = document.getElementById('setup-status');
+        const currentRoomSpan = document.getElementById('current-room');
+        const leaveBtn = document.getElementById('leave-btn');
+        const chatMessages = document.getElementById('chat-messages');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        // Join room function
+        async function joinRoom() {
+            const room = roomInput.value.trim();
+            const name = displayNameInput.value.trim();
+
+            if (!room || !name) {
+                setupStatus.textContent = 'Please enter both room name and display name';
+                setupStatus.style.color = '#e74c3c';
+                return;
+            }
+
+            try {
+                setupStatus.textContent = 'Connecting...';
+                setupStatus.style.color = '#f39c12';
+
+                const success = await chat.joinRoom(room, name);
+                
+                if (success) {
+                    // Show chat screen
+                    setupScreen.style.display = 'none';
+                    chatScreen.style.display = 'flex';
+                    currentRoomSpan.textContent = room;
+                    messageInput.focus();
+                    
+                    addSystemMessage(`Connected to room "${room}"`);
+                    addSystemMessage('Broadcasting to other open tabs/windows...');
+                }
+
+            } catch (error) {
+                setupStatus.textContent = 'Connection failed: ' + error.message;
+                setupStatus.style.color = '#e74c3c';
+            }
+        }
+
+        // Send message function
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            await chat.sendMessage(text);
+            messageInput.value = '';
+        }
+
+        // Leave room function
+        function leaveRoom() {
+            chat.leaveRoom();
+            
+            chatMessages.innerHTML = '';
+            
+            setupScreen.style.display = 'flex';
+            chatScreen.style.display = 'none';
+            setupStatus.textContent = '';
+        }
+
+        // Add message to UI
+        function addMessageToUI(sender, text, timestamp, isOwn) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isOwn ? 'own' : ''}`;
+            
+            const time = new Date(timestamp).toLocaleTimeString();
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <span class="sender">${sender}</span>
+                    <span class="timestamp">${time}</span>
+                </div>
+                <div class="message-text">${text}</div>
+            `;
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Add system message to UI
+        function addSystemMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message system';
+            messageDiv.innerHTML = `<div class="message-text">${text}</div>`;
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Set message callback
+        chat.onMessage = function(message) {
+            addMessageToUI(message.sender, message.text, message.timestamp, message.isOwn);
+        };
+
+        // Function to update join button state
+        function updateJoinButtonState() {
+            const roomName = roomInput.value.trim();
+            const userName = displayNameInput.value.trim();
+            joinBtn.disabled = !roomName || !userName;
+        }
+
+        // Event listeners
+        roomInput.addEventListener('input', updateJoinButtonState);
+        displayNameInput.addEventListener('input', updateJoinButtonState);
+        joinBtn.addEventListener('click', joinRoom);
+        leaveBtn.addEventListener('click', leaveRoom);
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Auto focus on room input
+        roomInput.focus();
+        
+        // Initial button state update
+        updateJoinButtonState();
+    </script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+{
+  "name": "local-network-chat",
+  "version": "1.0.0",
+  "description": "A standalone desktop chat application for local network communication",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "dist": "npm run build",
+    "broadcast-server": "node broadcast-server.js",
+    "simple-chat": "node broadcast-server.js"
+  },
+  "keywords": [
+    "chat",
+    "local-network",
+    "electron",
+    "p2p",
+    "encryption"
+  ],
+  "author": "Local Network Chat",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
+  "build": {
+    "appId": "com.localchat.app",
+    "productName": "Local Network Chat",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
