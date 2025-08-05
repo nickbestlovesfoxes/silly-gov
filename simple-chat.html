@@ -12,8 +12,9 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: #fff;
             height: 100vh;
             overflow: hidden;
         }
@@ -22,223 +23,203 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 30px;
-        }
-
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            opacity: 0.9;
-            font-size: 1.1em;
         }
 
         .setup-screen {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #000;
+        }
+
+        .setup-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 300px;
+        }
+
+        .input-field {
+            padding: 16px;
+            background: #111;
+            border: 2px solid #333;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #ff4444;
+        }
+
+        .input-field::placeholder {
+            color: #666;
+        }
+
+        .connect-btn {
+            padding: 16px;
+            background: #ff4444;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .connect-btn:hover:not(:disabled) {
+            background: #ff6666;
+        }
+
+        .connect-btn:disabled {
+            background: #333;
+            cursor: not-allowed;
         }
 
         .chat-screen {
             display: none;
-            flex: 1;
             flex-direction: column;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .join-btn {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-
-        .join-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-        }
-
-        .join-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
+            height: 100vh;
         }
 
         .chat-header {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 15px 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
+            background: #111;
+            padding: 16px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            color: white;
+            border-bottom: 1px solid #333;
         }
 
-        .room-name {
-            font-size: 1.3em;
-            font-weight: 600;
+        .header-info {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .room-name, .user-name {
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .user-name {
+            color: #ff4444;
         }
 
         .leave-btn {
-            padding: 10px 20px;
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 6px;
+            padding: 8px 16px;
+            background: transparent;
+            color: #fff;
+            border: 1px solid #333;
+            border-radius: 4px;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.2s;
         }
 
         .leave-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .chat-container {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            background: #ff4444;
+            border-color: #ff4444;
         }
 
         .chat-messages {
             flex: 1;
             padding: 20px;
             overflow-y: auto;
-            max-height: calc(100vh - 250px);
+            background: #000;
         }
 
         .message {
-            margin-bottom: 15px;
-            padding: 12px 15px;
-            border-radius: 10px;
-            max-width: 80%;
-            word-wrap: break-word;
+            margin-bottom: 16px;
+            max-width: 70%;
         }
 
         .message.own {
-            background: #667eea;
-            color: white;
             margin-left: auto;
-            border-bottom-right-radius: 4px;
-        }
-
-        .message.other {
-            background: #f1f3f4;
-            color: #333;
-            border-bottom-left-radius: 4px;
         }
 
         .message-header {
-            font-size: 0.85em;
-            opacity: 0.8;
-            margin-bottom: 5px;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
         }
 
         .message-text {
+            padding: 12px 16px;
+            border-radius: 8px;
             line-height: 1.4;
+        }
+
+        .message.own .message-text {
+            background: #ff4444;
+            color: #fff;
+        }
+
+        .message:not(.own) .message-text {
+            background: #111;
+            color: #fff;
+        }
+
+        .message.system .message-text {
+            background: transparent;
+            color: #666;
+            text-align: center;
+            font-style: italic;
+            padding: 8px;
         }
 
         .chat-input-container {
             padding: 20px;
-            border-top: 1px solid #eee;
+            background: #111;
+            border-top: 1px solid #333;
             display: flex;
-            gap: 10px;
+            gap: 12px;
         }
 
         .chat-input {
             flex: 1;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 25px;
+            padding: 12px 16px;
+            background: #000;
+            border: 2px solid #333;
+            border-radius: 4px;
+            color: #fff;
             font-size: 16px;
             outline: none;
+            transition: border-color 0.2s;
         }
 
         .chat-input:focus {
-            border-color: #667eea;
+            border-color: #ff4444;
+        }
+
+        .chat-input::placeholder {
+            color: #666;
         }
 
         .send-btn {
-            padding: 12px 25px;
-            background: #667eea;
-            color: white;
+            padding: 12px 20px;
+            background: #ff4444;
+            color: #fff;
             border: none;
-            border-radius: 25px;
+            border-radius: 4px;
             cursor: pointer;
             font-weight: 600;
-            transition: background 0.3s;
+            transition: background 0.2s;
         }
 
         .send-btn:hover {
-            background: #5a6fd8;
+            background: #ff6666;
         }
 
         .status {
-            margin-top: 15px;
-            padding: 10px;
-            border-radius: 6px;
+            margin-top: 12px;
             text-align: center;
             font-size: 14px;
-        }
-
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .status.info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-
-        .hidden {
-            display: none !important;
+            color: #ff4444;
         }
 
         /* Scrollbar styling */
@@ -247,57 +228,48 @@
         }
 
         .chat-messages::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 3px;
+            background: #111;
         }
 
         .chat-messages::-webkit-scrollbar-thumb {
-            background: #c1c1c1;
+            background: #333;
             border-radius: 3px;
         }
 
         .chat-messages::-webkit-scrollbar-thumb:hover {
-            background: #a8a8a8;
+            background: #444;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>🏠 Local Network Chat</h1>
-            <p>Simple broadcast chat on your local network</p>
-        </div>
-
         <!-- Setup Screen -->
         <div id="setup-screen" class="setup-screen">
-            <div class="form-group">
-                <label for="room-input">Room Name:</label>
-                <input type="text" id="room-input" placeholder="Enter room name (e.g., 'test')" maxlength="50" autocomplete="off">
+            <div class="setup-form">
+                <input type="text" id="room-input" class="input-field" placeholder="Room name" maxlength="50" autocomplete="off">
+                <input type="text" id="display-name-input" class="input-field" placeholder="Your name" maxlength="30" autocomplete="off">
+                <button id="join-btn" class="connect-btn" disabled>Connect</button>
+                <div class="status" id="setup-status"></div>
             </div>
-            <div class="form-group">
-                <label for="display-name-input">Display Name:</label>
-                <input type="text" id="display-name-input" placeholder="Your display name" maxlength="30" autocomplete="off">
-            </div>
-            <button id="join-btn" class="join-btn" disabled>Join Room</button>
-            <div class="status" id="setup-status"></div>
         </div>
 
         <!-- Chat Screen -->
         <div id="chat-screen" class="chat-screen">
             <div class="chat-header">
-                <div class="room-name" id="current-room"></div>
-                <button id="leave-btn" class="leave-btn">Leave Room</button>
+                <div class="header-info">
+                    <div class="room-name" id="current-room"></div>
+                    <div class="user-name" id="current-user"></div>
+                </div>
+                <button id="leave-btn" class="leave-btn">Leave</button>
             </div>
 
-            <div class="chat-container">
-                <div class="chat-messages" id="chat-messages">
-                    <!-- Messages will appear here -->
-                </div>
-                
-                <div class="chat-input-container">
-                    <input type="text" id="message-input" class="chat-input" placeholder="Type your message..." maxlength="500" autocomplete="off">
-                    <button id="send-btn" class="send-btn">Send</button>
-                </div>
+            <div class="chat-messages" id="chat-messages">
+                <!-- Messages will appear here -->
+            </div>
+            
+            <div class="chat-input-container">
+                <input type="text" id="message-input" class="chat-input" placeholder="Type a message..." maxlength="500" autocomplete="off">
+                <button id="send-btn" class="send-btn">Send</button>
             </div>
         </div>
     </div>
@@ -491,7 +463,7 @@
             }
 
             // Set message callback
-            onMessage(callback) {
+            setMessageCallback(callback) {
                 this.onMessage = callback;
             }
         }
@@ -507,6 +479,7 @@
         const joinBtn = document.getElementById('join-btn');
         const setupStatus = document.getElementById('setup-status');
         const currentRoomSpan = document.getElementById('current-room');
+        const currentUserSpan = document.getElementById('current-user');
         const leaveBtn = document.getElementById('leave-btn');
         const chatMessages = document.getElementById('chat-messages');
         const messageInput = document.getElementById('message-input');
@@ -534,6 +507,7 @@
                     setupScreen.style.display = 'none';
                     chatScreen.style.display = 'flex';
                     currentRoomSpan.textContent = room;
+                    currentUserSpan.textContent = name;
                     messageInput.focus();
                     
                     addSystemMessage(`Connected to room "${room}"`);
@@ -595,9 +569,9 @@
         }
 
         // Set message callback
-        chat.onMessage = function(message) {
+        chat.setMessageCallback(function(message) {
             addMessageToUI(message.sender, message.text, message.timestamp, message.isOwn);
-        };
+        });
 
         // Function to update join button state
         function updateJoinButtonState() {
