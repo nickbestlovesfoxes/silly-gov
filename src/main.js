@@ -8,9 +8,12 @@ let mainWindow;
 let udpSocket;
 let currentRoom = null;
 let displayName = null;
+let myPeerId = null;
 let peers = new Map(); // peerId -> { address, port, lastSeen }
 let messages = []; // In-memory message storage
 let roomKey = null;
+let processedMessages = new Set(); // Track processed message IDs to prevent duplicates
+let historyReceived = false; // Track if we've received history from peers
 
 // Constants
 const BASE_PORT = 12000;
@@ -25,6 +28,7 @@ const MESSAGE_TYPES = {
   MESSAGE: 'message',
   ACK: 'ack',
   HISTORY: 'history',
+  HISTORY_REQUEST: 'history_request',
   STATUS_REQUEST: 'status_request',
   LEAVE: 'leave'
 };
@@ -57,7 +61,7 @@ function deriveKey(roomName) {
 
 function encrypt(text, key) {
   const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipher('aes-256-gcm', key);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   cipher.setAAD(Buffer.from('localchat', 'utf8'));
   
   let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -74,7 +78,8 @@ function encrypt(text, key) {
 
 function decrypt(encryptedData, key) {
   try {
-    const decipher = crypto.createDecipher('aes-256-gcm', key);
+    const iv = Buffer.from(encryptedData.iv, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAAD(Buffer.from('localchat', 'utf8'));
     decipher.setAuthTag(Buffer.from(encryptedData.authTag, 'hex'));
     
@@ -97,7 +102,12 @@ function getPortForRoom(roomName) {
 
 function createUDPSocket() {
   if (udpSocket) {
-    udpSocket.close();
+    try {
+      udpSocket.close();
+    } catch (err) {
+      // Ignore close errors
+    }
+    udpSocket = null;
   }
 
   udpSocket = dgram.createSocket('udp4');
@@ -105,13 +115,37 @@ function createUDPSocket() {
   udpSocket.on('message', handleUDPMessage);
   udpSocket.on('error', (err) => {
     console.error('UDP Error:', err);
-    mainWindow.webContents.send('error', `Network error: ${err.message}`);
+    // Don't send bind errors to UI - they're handled in join-room
+    if (err.code !== 'EADDRINUSE' && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('error', `Network error: ${err.message}`);
+    }
   });
 }
 
 function handleUDPMessage(buffer, rinfo) {
   try {
     const message = JSON.parse(buffer.toString());
+    
+    // Skip our own messages immediately
+    if (message.peerId === myPeerId) {
+      return;
+    }
+    
+    // Skip duplicate messages (prevents multi-port duplicates)
+    if (message.messageId && processedMessages.has(message.messageId)) {
+      return;
+    }
+    
+    // Add to processed messages set
+    if (message.messageId) {
+      processedMessages.add(message.messageId);
+      
+      // Clean up old message IDs (keep last 1000)
+      if (processedMessages.size > 1000) {
+        const oldMessages = Array.from(processedMessages).slice(0, 500);
+        oldMessages.forEach(id => processedMessages.delete(id));
+      }
+    }
     
     // Decrypt the message if it has encrypted content
     if (message.encrypted && roomKey) {
@@ -124,13 +158,14 @@ function handleUDPMessage(buffer, rinfo) {
       }
     }
 
-    // Update peer info
-    if (message.peerId && message.peerId !== getPeerId()) {
+    // Update peer info for valid peers
+    if (message.peerId && message.peerId !== myPeerId) {
       peers.set(message.peerId, {
         address: rinfo.address,
         port: rinfo.port,
         lastSeen: Date.now(),
-        displayName: message.displayName
+        displayName: message.displayName,
+        hasTimedOut: false // Reset timeout flag when peer is active
       });
     }
 
@@ -154,6 +189,9 @@ function handleMessage(message, rinfo) {
     case MESSAGE_TYPES.HISTORY:
       handleHistoryMessage(message);
       break;
+    case MESSAGE_TYPES.HISTORY_REQUEST:
+      handleHistoryRequest(message, rinfo);
+      break;
     case MESSAGE_TYPES.STATUS_REQUEST:
       handleStatusRequest(message, rinfo);
       break;
@@ -166,25 +204,8 @@ function handleMessage(message, rinfo) {
 function handleJoinMessage(message, rinfo) {
   console.log(`${message.displayName} joined from ${rinfo.address}`);
   
-  // Send current chat history to the new peer
-  if (messages.length > 0) {
-    sendHistoryToPeer(message.peerId, rinfo);
-  }
-  
-  // Notify UI
-  mainWindow.webContents.send('peer-joined', {
-    peerId: message.peerId,
-    displayName: message.displayName,
-    peerCount: peers.size
-  });
-  
-  // Send ACK
-  sendMessage({
-    type: MESSAGE_TYPES.ACK,
-    messageId: message.messageId,
-    peerId: getPeerId(),
-    displayName: displayName
-  }, rinfo.address, rinfo.port);
+  // Don't automatically send history - let the new peer request it
+  // This allows them to choose which peer's history to use
 }
 
 function handleChatMessage(message, rinfo) {
@@ -199,47 +220,36 @@ function handleChatMessage(message, rinfo) {
   
   // Send to UI
   mainWindow.webContents.send('new-message', chatMessage);
-  
-  // Send ACK
-  sendMessage({
-    type: MESSAGE_TYPES.ACK,
-    messageId: message.messageId,
-    peerId: getPeerId(),
-    displayName: displayName
-  }, rinfo.address, rinfo.port);
 }
 
 function handleAckMessage(message) {
-  // Handle ACK for message delivery confirmation
-  mainWindow.webContents.send('message-ack', message.messageId);
+  // ACK handling removed for simplicity
 }
 
 function handleHistoryMessage(message) {
-  if (message.content.history) {
+  // Only accept the first history response to avoid conflicts
+  if (!historyReceived && message.content.history) {
+    historyReceived = true;
     messages = [...message.content.history];
     mainWindow.webContents.send('history-received', messages);
+    console.log(`Received chat history from ${message.displayName} (${message.content.history.length} messages)`);
+  }
+}
+
+function handleHistoryRequest(message, rinfo) {
+  // Send our chat history to the requesting peer
+  if (messages.length > 0) {
+    sendHistoryToPeer(message.peerId, rinfo);
   }
 }
 
 function handleStatusRequest(message, rinfo) {
-  sendMessage({
-    type: MESSAGE_TYPES.ACK,
-    messageId: message.messageId,
-    peerId: getPeerId(),
-    displayName: displayName
-  }, rinfo.address, rinfo.port);
+  // Simplified - no ACK needed
 }
 
 function handleLeaveMessage(message) {
   if (peers.has(message.peerId)) {
-    const peer = peers.get(message.peerId);
     peers.delete(message.peerId);
-    
-    mainWindow.webContents.send('peer-left', {
-      peerId: message.peerId,
-      displayName: peer.displayName,
-      peerCount: peers.size
-    });
   }
 }
 
@@ -247,13 +257,26 @@ function sendHistoryToPeer(peerId, rinfo) {
   const historyMessage = {
     type: MESSAGE_TYPES.HISTORY,
     messageId: generateMessageId(),
-    peerId: getPeerId(),
+    peerId: myPeerId,
     displayName: displayName,
     timestamp: Date.now(),
     content: { history: messages }
   };
   
   sendMessage(historyMessage, rinfo.address, rinfo.port);
+}
+
+function requestChatHistory() {
+  const historyRequestMessage = {
+    type: MESSAGE_TYPES.HISTORY_REQUEST,
+    messageId: generateMessageId(),
+    peerId: myPeerId,
+    displayName: displayName,
+    timestamp: Date.now()
+  };
+  
+  console.log('Requesting chat history from peers...');
+  broadcastMessage(historyRequestMessage);
 }
 
 function sendMessage(message, address, port) {
@@ -268,8 +291,9 @@ function sendMessage(message, address, port) {
   
   const buffer = Buffer.from(JSON.stringify(message));
   udpSocket.send(buffer, port, address, (error) => {
-    if (error) {
-      console.error('Error sending message:', error);
+    if (error && error.code !== 'EACCES') {
+      // Only log non-permission errors
+      console.error('Error sending message to', address + ':' + port, error.message);
     }
   });
 }
@@ -277,20 +301,36 @@ function sendMessage(message, address, port) {
 function broadcastMessage(message) {
   if (!currentRoom || !udpSocket) return;
   
-  const port = getPortForRoom(currentRoom);
-  const broadcasts = [
-    '255.255.255.255',
-    '192.168.1.255',
-    '192.168.0.255',
-    '10.0.0.255'
+  const basePort = getPortForRoom(currentRoom);
+  
+  // Use multiple broadcast strategies for better coverage
+  const addresses = [
+    '127.0.0.1',      // localhost
+    '192.168.1.255',  // common home network broadcast
+    '192.168.0.255',  // common home network broadcast  
+    '10.0.0.255',     // corporate networks
+    '172.16.255.255'  // private network range
   ];
   
-  broadcasts.forEach(address => {
-    sendMessage(message, address, port);
+  // Send to fewer ports to reduce duplicates (base port + 1 backup)
+  const portRange = [basePort, basePort + 1];
+  
+  // Send to known peers directly (single port)
+  peers.forEach((peer, peerId) => {
+    if (peerId !== myPeerId) {
+      sendMessage(message, peer.address, basePort);
+    }
+  });
+  
+  // Send to broadcast addresses on limited ports
+  addresses.forEach(address => {
+    portRange.forEach(port => {
+      sendMessage(message, address, port);
+    });
   });
 }
 
-function getPeerId() {
+function generatePeerId() {
   return crypto.randomBytes(8).toString('hex');
 }
 
@@ -304,20 +344,21 @@ function cleanupPeers() {
   const toRemove = [];
   
   peers.forEach((peer, peerId) => {
-    if (now - peer.lastSeen > PEER_TIMEOUT) {
+    if (now - peer.lastSeen > PEER_TIMEOUT && !peer.hasTimedOut) {
       toRemove.push(peerId);
     }
   });
   
   toRemove.forEach(peerId => {
     const peer = peers.get(peerId);
-    peers.delete(peerId);
-    
-    mainWindow.webContents.send('peer-timeout', {
-      peerId,
-      displayName: peer.displayName,
-      peerCount: peers.size
-    });
+    if (peer && !peer.hasTimedOut) {
+      peer.hasTimedOut = true; // Mark as timed out to prevent duplicate messages
+      
+      // Remove after a short delay
+      setTimeout(() => {
+        peers.delete(peerId);
+      }, 100);
+    }
   });
 }
 
@@ -327,27 +368,107 @@ setInterval(cleanupPeers, 5000);
 // IPC handlers
 ipcMain.handle('join-room', async (event, roomName, userName) => {
   try {
+    console.log(`Attempting to join room: ${roomName} as ${userName}`);
+    
+    // Clean up any existing connection first
+    if (udpSocket) {
+      try {
+        udpSocket.close();
+      } catch (err) {
+        // Ignore close errors
+      }
+      udpSocket = null;
+    }
+    
     currentRoom = roomName;
-    displayName = userName;
+    displayName = userName || 'Anonymous';
+    myPeerId = generatePeerId(); // Generate a unique peer ID
     roomKey = deriveKey(roomName);
     
-    createUDPSocket();
-    
     const port = getPortForRoom(roomName);
-    udpSocket.bind(port);
+    console.log(`Base port for room ${roomName}: ${port}`);
+    
+    // Try to find an available port
+    let actualPort = null;
+    let boundSocket = null;
+    
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const bindPort = port + attempt;
+        console.log(`Attempting to bind to port ${bindPort} (attempt ${attempt + 1})`);
+        
+        // Create a new socket for each attempt
+        const testSocket = dgram.createSocket('udp4');
+        
+        // Use a timeout to avoid hanging
+        const bindResult = await Promise.race([
+          new Promise((resolve, reject) => {
+            testSocket.bind(bindPort, (err) => {
+              if (err) {
+                testSocket.close();
+                reject(err);
+              } else {
+                resolve({ socket: testSocket, port: bindPort });
+              }
+            });
+          }),
+          new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Bind timeout')), 2000);
+          })
+        ]);
+        
+        // Success!
+        boundSocket = bindResult.socket;
+        actualPort = bindResult.port;
+        console.log(`Successfully bound to port ${actualPort}`);
+        break;
+        
+      } catch (err) {
+        console.log(`Failed to bind to port ${port + attempt}: ${err.message}`);
+        if (err.code === 'EADDRINUSE' && attempt < 4) {
+          continue;
+        } else if (attempt === 4) {
+          throw new Error(`Could not bind to any port after 5 attempts. Last error: ${err.message}`);
+        }
+      }
+    }
+    
+    if (!boundSocket || !actualPort) {
+      throw new Error('Failed to bind to any port');
+    }
+    
+    // Set up the bound socket as our main UDP socket
+    udpSocket = boundSocket;
+    udpSocket.on('message', handleUDPMessage);
+    udpSocket.on('error', (err) => {
+      console.error('UDP Error:', err);
+      if (err.code !== 'EADDRINUSE' && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('error', `Network error: ${err.message}`);
+      }
+    });
+    
+    // Enable broadcast
+    udpSocket.setBroadcast(true);
+    console.log(`Room joined successfully on port ${actualPort}`);
     
     // Send join message
     const joinMessage = {
       type: MESSAGE_TYPES.JOIN,
       messageId: generateMessageId(),
-      peerId: getPeerId(),
+      peerId: myPeerId,
       displayName: displayName,
       timestamp: Date.now()
     };
     
     broadcastMessage(joinMessage);
     
-    return { success: true, port };
+    // Request chat history from any existing peers
+    // Use a small delay to let the join message be processed first
+    setTimeout(() => {
+      requestChatHistory();
+    }, 500);
+    
+    return { success: true, port: actualPort };
   } catch (error) {
     console.error('Error joining room:', error);
     return { success: false, error: error.message };
@@ -355,7 +476,7 @@ ipcMain.handle('join-room', async (event, roomName, userName) => {
 });
 
 ipcMain.handle('send-message', async (event, text) => {
-  if (!currentRoom || !displayName) {
+  if (!currentRoom || !displayName || !myPeerId) {
     return { success: false, error: 'Not in a room' };
   }
   
@@ -363,18 +484,18 @@ ipcMain.handle('send-message', async (event, text) => {
   const chatMessage = {
     type: MESSAGE_TYPES.MESSAGE,
     messageId,
-    peerId: getPeerId(),
+    peerId: myPeerId,
     displayName: displayName,
     timestamp: Date.now(),
     content: { text }
   };
   
-  // Add to local messages
+  // Add to local messages first
   const localMessage = {
     id: messageId,
     sender: displayName,
     text,
-    timestamp: Date.now()
+    timestamp: chatMessage.timestamp
   };
   
   messages.push(localMessage);
@@ -387,25 +508,39 @@ ipcMain.handle('send-message', async (event, text) => {
 
 ipcMain.handle('leave-room', async () => {
   if (currentRoom && udpSocket) {
-    // Send leave message
-    const leaveMessage = {
-      type: MESSAGE_TYPES.LEAVE,
-      messageId: generateMessageId(),
-      peerId: getPeerId(),
-      displayName: displayName,
-      timestamp: Date.now()
-    };
-    
-    broadcastMessage(leaveMessage);
+    try {
+      // Send leave message
+      const leaveMessage = {
+        type: MESSAGE_TYPES.LEAVE,
+        messageId: generateMessageId(),
+        peerId: myPeerId,
+        displayName: displayName,
+        timestamp: Date.now()
+      };
+      
+      broadcastMessage(leaveMessage);
+      
+      // Small delay to ensure message is sent
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (err) {
+      console.error('Error sending leave message:', err);
+    }
     
     // Cleanup
-    udpSocket.close();
+    try {
+      udpSocket.close();
+    } catch (err) {
+      // Ignore close errors
+    }
     udpSocket = null;
     currentRoom = null;
     displayName = null;
+    myPeerId = null;
     roomKey = null;
     peers.clear();
     messages = [];
+    processedMessages.clear(); // Clear processed message IDs
+    historyReceived = false; // Reset history received flag
   }
   
   return { success: true };
@@ -423,6 +558,13 @@ ipcMain.handle('get-peers', async () => {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
+  if (udpSocket) {
+    try {
+      udpSocket.close();
+    } catch (err) {
+      // Ignore close errors
+    }
+  }
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -436,6 +578,10 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   if (udpSocket) {
-    udpSocket.close();
+    try {
+      udpSocket.close();
+    } catch (err) {
+      // Ignore close errors
+    }
   }
 });

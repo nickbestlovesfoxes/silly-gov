@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
     <title>Local Network Chat</title>
     <style>
         * {
@@ -12,8 +13,9 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: #fff;
             height: 100vh;
             overflow: hidden;
         }
@@ -24,30 +26,291 @@
             flex-direction: column;
         }
 
-        .header {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 20px;
-            text-align: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .header h1 {
-            color: white;
-            font-size: 2em;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 1.1em;
-        }
-
-        .content {
-            flex: 1;
+        .setup-screen {
             display: flex;
             flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #000;
+        }
+
+        .setup-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 300px;
+        }
+
+        .input-field {
+            padding: 16px;
+            background: #111;
+            border: 2px solid #333;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #ff4444;
+        }
+
+        .input-field::placeholder {
+            color: #666;
+        }
+
+        .connect-btn {
+            padding: 16px;
+            background: #ff4444;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .connect-btn:hover:not(:disabled) {
+            background: #ff6666;
+        }
+
+        .connect-btn:disabled {
+            background: #333;
+            cursor: not-allowed;
+        }
+
+        .encryption-info {
+            text-align: center;
+            font-size: 14px;
+            color: #555;
+            margin-top: -15px;
+        }
+
+        .chat-screen {
+            display: none;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .chat-header {
+            background: #111;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+        }
+
+        .header-info {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .room-name {
+            font-size: 16px;
+            font-weight: 500;
+            color: #fff;
+        }
+
+        .room-name::after {
+            content: '';
+        }
+
+        .leave-btn {
+            padding: 8px 16px;
+            background: transparent;
+            color: #fff;
+            border: 1px solid #333;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .leave-btn:hover {
+            background: #ff4444;
+            border-color: #ff4444;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 5px;
+            padding-bottom: 100px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            background: #000;
+        }
+
+        .message {
+            padding: 1px 1px;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: baseline;
+            gap: 1ch;
+            line-height: 1.375rem;
+            word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .message:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: #666;
+            font-weight: 500;
+            min-width: 60px;
+            text-align: right;
+        }
+
+        .message-author {
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .message.own .message-author {
+            color: #fff;
+        }
+
+        .message-content {
+            font-size: 16px;
+            color: #b9bbbe;
+            flex: 1;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .message.system {
+            justify-content: center;
+            color: #666;
+            font-style: italic;
+            font-size: 14px;
+        }
+
+        .chat-input-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
             padding: 20px;
+            background: transparent;
+            display: flex;
+            gap: 12px;
+            z-index: 10;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            background: #000;
+            border: 2px solid #333;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+            resize: none;
+            font-family: inherit;
+            min-height: 44px;
+            max-height: 200px;
+            overflow-y: hidden;
+        }
+
+        /* Hide scrollbar for textarea */
+        .chat-input::-webkit-scrollbar {
+            display: none;
+        }
+
+        .chat-input:focus {
+            border-color: #ff4444;
+        }
+
+        .chat-input::placeholder {
+            color: #666;
+        }
+
+        .send-btn {
+            padding: 12px 20px;
+            background: #ff4444;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        .send-btn:hover {
+            background: #ff6666;
+        }
+
+        .status {
+            margin-top: 12px;
+            text-align: center;
+            font-size: 14px;
+            color: #ff4444;
+        }
+
+        /* Scrollbar styling */
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #111;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 3px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Setup Screen -->
+        <div id="setup-screen" class="setup-screen">
+            <div class="setup-form">
+                <input type="text" id="room-input" class="input-field" placeholder="Room name / Key" maxlength="50" autocomplete="off">
+                <input type="text" id="display-name-input" class="input-field" placeholder="Your name (optional)" maxlength="30" autocomplete="off">
+                <button id="join-btn" class="connect-btn" disabled>Connect</button>
+                <div class="encryption-info">AES-256 Encrypted + UDP Network</div>
+                <div class="status" id="setup-status"></div>
+            </div>
+        </div>
+
+        <!-- Chat Screen -->
+        <div id="chat-screen" class="chat-screen">
+            <div class="chat-header">
+                <div class="header-info">
+                    <div class="room-name" id="current-room"></div>
+                </div>
+                <button id="leave-btn" class="leave-btn">Leave</button>
+            </div>
+
+            <div class="chat-messages" id="chat-messages">
+                <!-- Messages will appear here -->
+            </div>
+            
+            <div class="chat-input-container">
+                <textarea id="message-input" class="chat-input" placeholder="Message" maxlength="10000" autocomplete="off" rows="1"></textarea>
+                <button id="send-btn" class="send-btn">Send</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
         }
 
         .setup-screen {

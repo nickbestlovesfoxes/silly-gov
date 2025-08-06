@@ -57,6 +57,23 @@ A secure, standalone desktop chat application for peer-to-peer communication on 
 4. **Leave Room**
    - Click "Leave Room" to disconnect and return to setup
 
+### Running Multiple Instances
+
+You can run multiple chat instances on the same device simultaneously:
+
+**Simple Method:**
+- Just run `npm run dev` (or the .exe file) multiple times
+- Each instance will automatically find an available port
+- All instances can join the same room or different rooms
+- No conflicts or setup needed - it just works!
+
+**Use Cases:**
+- **Testing**: Simulate multiple users on one machine
+- **Multi-Room Monitoring**: Join different rooms simultaneously  
+- **Demo Purposes**: Show multiple perspectives in presentations
+
+**Note**: Each instance uses about 50-100MB of RAM and minimal CPU when idle.
+
 ## Technical Details
 
 ### Architecture

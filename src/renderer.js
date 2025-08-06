@@ -16,12 +16,14 @@ const sendBtn = document.getElementById('send-btn');
 
 // Application state
 let currentDisplayName = '';
-let peerCount = 0;
+let isInRoom = false;
 
 // Initialize the application
 function init() {
     setupEventListeners();
     updateJoinButtonState();
+    messageInput.focus = () => {}; // Prevent auto-focus in setup
+    roomInput.focus();
 }
 
 function setupEventListeners() {
@@ -33,48 +35,37 @@ function setupEventListeners() {
     // Chat screen events
     leaveBtn.addEventListener('click', leaveRoom);
     sendBtn.addEventListener('click', sendMessage);
-    messageInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
+    
+    // Handle textarea input and auto-resize
+    messageInput.addEventListener('input', autoResizeTextarea);
+    
+    // Handle key presses for Discord-like behavior
+    messageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            if (e.shiftKey) {
+                // Shift+Enter: Allow new line (default behavior)
+                return;
+            } else {
+                // Enter alone: Send message
+                e.preventDefault();
+                sendMessage();
+            }
         }
     });
 
     // IPC event listeners
     ipcRenderer.on('new-message', (event, message) => {
-        addMessage(message, false);
-    });
-
-    ipcRenderer.on('peer-joined', (event, data) => {
-        peerCount = data.peerCount;
-        updatePeerCount();
-        addSystemMessage(`${data.displayName} joined the room`);
-    });
-
-    ipcRenderer.on('peer-left', (event, data) => {
-        peerCount = data.peerCount;
-        updatePeerCount();
-        addSystemMessage(`${data.displayName} left the room`);
-    });
-
-    ipcRenderer.on('peer-timeout', (event, data) => {
-        peerCount = data.peerCount;
-        updatePeerCount();
-        addSystemMessage(`${data.displayName} disconnected (timeout)`);
+        // Handle both message.content and message.text for compatibility
+        const messageText = message.text || message.content || '';
+        addMessageToUI(message.sender, messageText, message.timestamp, false);
     });
 
     ipcRenderer.on('history-received', (event, messages) => {
         // Clear existing messages and add history
         chatMessages.innerHTML = '';
         messages.forEach(message => {
-            addMessage(message, message.sender === currentDisplayName);
+            addMessageToUI(message.sender, message.text || message.content, message.timestamp, message.sender === currentDisplayName);
         });
-        addSystemMessage('Chat history synchronized');
-    });
-
-    ipcRenderer.on('message-ack', (event, messageId) => {
-        // Handle message acknowledgment if needed
-        console.log('Message acknowledged:', messageId);
     });
 
     ipcRenderer.on('error', (event, errorMessage) => {
@@ -84,38 +75,47 @@ function setupEventListeners() {
 
 function updateJoinButtonState() {
     const roomName = roomInput.value.trim();
-    const displayName = displayNameInput.value.trim();
-    const isValid = roomName.length > 0 && displayName.length > 0;
-    
-    joinBtn.disabled = !isValid;
+    joinBtn.disabled = !roomName;
+}
+
+// Format name function: convert spaces to dashes, capitalize first letter, lowercase rest
+function formatName(name) {
+    if (!name) return '';
+    return name.trim()
+        .replace(/\s+/g, '-') // Replace spaces with dashes
+        .toLowerCase() // Make everything lowercase
+        .replace(/^./, char => char.toUpperCase()); // Capitalize first character
+}
+
+// Auto-resize textarea function
+function autoResizeTextarea() {
+    messageInput.style.height = '44px'; // Reset to minimum height
+    const scrollHeight = messageInput.scrollHeight;
+    const maxHeight = 200; // Match CSS max-height
+    messageInput.style.height = Math.min(scrollHeight, maxHeight) + 'px';
 }
 
 async function joinRoom() {
-    const roomName = roomInput.value.trim();
-    const displayName = displayNameInput.value.trim();
+    const room = formatName(roomInput.value);
+    const name = displayNameInput.value.trim() ? formatName(displayNameInput.value) : '';
 
-    if (!roomName || !displayName) {
-        showStatus('Please enter both room name and display name', 'error');
-        return;
-    }
-
-    // Validate room name (alphanumeric and basic symbols only)
-    if (!/^[a-zA-Z0-9_-]+$/.test(roomName)) {
-        showStatus('Room name can only contain letters, numbers, underscores, and hyphens', 'error');
+    if (!room) {
+        showStatus('Please enter a room name', 'error');
         return;
     }
 
     joinBtn.disabled = true;
-    showStatus('Joining room...', 'info');
+    showStatus('Connecting...', 'info');
 
     try {
-        const result = await ipcRenderer.invoke('join-room', roomName, displayName);
+        const result = await ipcRenderer.invoke('join-room', room, name);
         
         if (result.success) {
-            currentDisplayName = displayName;
-            currentRoomSpan.textContent = roomName;
-            peerCount = 0;
-            updatePeerCount();
+            currentDisplayName = name || 'Anonymous';
+            isInRoom = true;
+            
+            // Show room name and user name together with styling
+            currentRoomSpan.innerHTML = `${room} <span style="color: #888;">•</span> <span style="color: #ff4444;">${currentDisplayName}</span>`;
             
             // Switch to chat screen
             setupScreen.style.display = 'none';
@@ -124,11 +124,9 @@ async function joinRoom() {
             // Clear any existing messages
             chatMessages.innerHTML = '';
             
-            // Focus message input
+            // Update placeholder with room name
+            messageInput.placeholder = `Message ${room}`;
             messageInput.focus();
-            
-            addSystemMessage(`Welcome to room "${roomName}"! Listening on port ${result.port}`);
-            addSystemMessage('Looking for other peers...');
             
         } else {
             showStatus(`Failed to join room: ${result.error}`, 'error');
@@ -144,6 +142,10 @@ async function joinRoom() {
 async function leaveRoom() {
     try {
         await ipcRenderer.invoke('leave-room');
+        
+        // Update state
+        isInRoom = false;
+        currentDisplayName = '';
         
         // Switch back to setup screen
         chatScreen.style.display = 'none';
@@ -163,7 +165,6 @@ async function leaveRoom() {
         
     } catch (error) {
         console.error('Error leaving room:', error);
-        addSystemMessage(`Error leaving room: ${error.message}`);
     }
 }
 
@@ -172,103 +173,68 @@ async function sendMessage() {
     
     if (!text) return;
     
+    if (!isInRoom) {
+        return;
+    }
+
+    // Store message locally first (optimistic UI)
+    const tempMessage = text;
     messageInput.value = '';
+    autoResizeTextarea(); // Reset height after clearing
     sendBtn.disabled = true;
 
     try {
-        const result = await ipcRenderer.invoke('send-message', text);
+        const result = await ipcRenderer.invoke('send-message', tempMessage);
         
         if (result.success) {
-            addMessage(result.message, true);
+            // Add the message to UI immediately (local echo)
+            addMessageToUI(currentDisplayName, tempMessage, Date.now(), true);
         } else {
-            addSystemMessage(`Failed to send message: ${result.error}`);
+            // Restore message on failure
+            messageInput.value = tempMessage;
+            autoResizeTextarea();
         }
     } catch (error) {
         console.error('Error sending message:', error);
-        addSystemMessage(`Error sending message: ${error.message}`);
+        // Restore message on error
+        messageInput.value = tempMessage;
+        autoResizeTextarea();
     } finally {
         sendBtn.disabled = false;
         messageInput.focus();
     }
 }
 
+// Add message to UI with Discord-style layout
+function addMessageToUI(sender, text, timestamp, isOwn) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${isOwn ? 'own' : ''}`;
+    
+    const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const displayName = sender || 'Anonymous';
+    messageDiv.innerHTML = `
+        <span class="message-time">${time}</span>
+        <span class="message-author">${displayName}</span>
+        <span class="message-content">${text}</span>
+    `;
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
 function addMessage(message, isOwn) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${isOwn ? 'own' : 'other'}`;
-    
-    const headerDiv = document.createElement('div');
-    headerDiv.className = 'message-header';
-    headerDiv.textContent = `${message.sender} • ${formatTimestamp(message.timestamp)}`;
-    
-    const textDiv = document.createElement('div');
-    textDiv.className = 'message-text';
-    textDiv.textContent = message.text;
-    
-    messageDiv.appendChild(headerDiv);
-    messageDiv.appendChild(textDiv);
-    
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function addSystemMessage(text) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'system-message';
-    messageDiv.textContent = text;
-    
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function updatePeerCount() {
-    const text = peerCount === 0 ? 'No other peers' : 
-                 peerCount === 1 ? '1 peer connected' : 
-                 `${peerCount} peers connected`;
-    peerCountSpan.textContent = text;
+    addMessageToUI(message.sender, message.content || message.text, message.timestamp, isOwn);
 }
 
 function showStatus(message, type = 'info') {
     setupStatus.textContent = message;
-    setupStatus.className = `status ${type}`;
-}
-
-function formatTimestamp(timestamp) {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-// Utility functions
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    setupStatus.style.color = type === 'error' ? '#e74c3c' : '#f39c12';
 }
 
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', init);
 
-// Handle window focus for better UX
-window.addEventListener('focus', () => {
-    if (chatScreen.style.display !== 'none') {
-        messageInput.focus();
-    } else {
-        roomInput.focus();
-    }
-});
-
-// Auto-save display name to localStorage
-displayNameInput.addEventListener('input', () => {
-    const displayName = displayNameInput.value.trim();
-    if (displayName) {
-        localStorage.setItem('localchat-displayname', displayName);
-    }
-});
-
-// Load saved display name on startup
+// Auto focus on room input
 document.addEventListener('DOMContentLoaded', () => {
-    const savedDisplayName = localStorage.getItem('localchat-displayname');
-    if (savedDisplayName) {
-        displayNameInput.value = savedDisplayName;
-        updateJoinButtonState();
-    }
+    roomInput.focus();
 });
