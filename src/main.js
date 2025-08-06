@@ -213,6 +213,7 @@ function handleChatMessage(message, rinfo) {
     id: message.messageId,
     sender: message.displayName,
     text: message.content.text,
+    files: message.content.files || [],
     timestamp: message.timestamp
   };
   
@@ -475,19 +476,30 @@ ipcMain.handle('join-room', async (event, roomName, userName) => {
   }
 });
 
-ipcMain.handle('send-message', async (event, text) => {
+ipcMain.handle('send-message', async (event, messageData) => {
   if (!currentRoom || !displayName || !myPeerId) {
     return { success: false, error: 'Not in a room' };
   }
   
   const messageId = generateMessageId();
+  
+  // Handle both old string format and new object format
+  let text, files;
+  if (typeof messageData === 'string') {
+    text = messageData;
+    files = [];
+  } else {
+    text = messageData.text || '';
+    files = messageData.files || [];
+  }
+  
   const chatMessage = {
     type: MESSAGE_TYPES.MESSAGE,
     messageId,
     peerId: myPeerId,
     displayName: displayName,
     timestamp: Date.now(),
-    content: { text }
+    content: { text, files }
   };
   
   // Add to local messages first
@@ -495,6 +507,7 @@ ipcMain.handle('send-message', async (event, text) => {
     id: messageId,
     sender: displayName,
     text,
+    files,
     timestamp: chatMessage.timestamp
   };
   
