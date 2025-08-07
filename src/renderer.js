@@ -119,7 +119,7 @@ function handleFileSelection(event) {
         const fileId = generateFileId();
         const fileSize = formatFileSize(file.size);
         
-        // Store file data as Base64
+        // Store file data as Base64 and then create the element
         const reader = new FileReader();
         reader.onload = (e) => {
             const base64Data = arrayBufferToBase64(e.target.result);
@@ -128,11 +128,10 @@ function handleFileSelection(event) {
                 size: file.size,
                 data: base64Data
             });
+            // Create file element AFTER file is read
+            createFileElement(fileId, file.name, fileSize);
         };
         reader.readAsArrayBuffer(file);
-        
-        // Create file element
-        createFileElement(fileId, file.name, fileSize);
     });
     
     // Clear the file input
@@ -169,7 +168,7 @@ function createFileElement(fileId, fileName, fileSize) {
     });
     
     const textSpan = document.createElement('span');
-    textSpan.className = 'file-element-text';
+    textSpan.className = 'file-element-text file-name';
     textSpan.textContent = fileName;
 
     const sizeSpan = document.createElement('span');
@@ -402,6 +401,7 @@ function addMessageToUI(sender, payload, timestamp, isOwn) {
                     }
 
                     const fileNameSpan = document.createElement('span');
+                    fileNameSpan.className = 'file-name';
                     fileNameSpan.textContent = escapeHtml(file.name);
 
                     const fileSizeSpan = document.createElement('span');
