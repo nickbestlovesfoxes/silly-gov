@@ -27,7 +27,6 @@ const MAX_RETRIES = 3;
 const MESSAGE_TYPES = {
   JOIN: 'join',
   MESSAGE: 'message',
-  FILE_CHUNK: 'file_chunk',
   ACK: 'ack',
   HISTORY: 'history',
   HISTORY_REQUEST: 'history_request',
@@ -185,9 +184,6 @@ function handleMessage(message, rinfo) {
     case MESSAGE_TYPES.MESSAGE:
       handleChatMessage(message, rinfo);
       break;
-    case MESSAGE_TYPES.FILE_CHUNK:
-      handleFileChunkMessage(message);
-      break;
     case MESSAGE_TYPES.ACK:
       handleAckMessage(message);
       break;
@@ -226,11 +222,6 @@ function handleChatMessage(message, rinfo) {
   
   // Send to UI
   mainWindow.webContents.send('new-message', chatMessage);
-}
-
-function handleFileChunkMessage(message) {
-  // Forward the chunk to the renderer process
-  mainWindow.webContents.send('file-chunk-received', message.content);
 }
 
 function handleAckMessage(message) {
@@ -572,18 +563,6 @@ ipcMain.handle('get-peers', async () => {
 
 // App event handlers
 app.whenReady().then(createWindow);
-
-ipcMain.on('send-file-chunk', (event, chunkData) => {
-  const chunkMessage = {
-    type: MESSAGE_TYPES.FILE_CHUNK,
-    messageId: generateMessageId(),
-    peerId: myPeerId,
-    displayName: displayName,
-    timestamp: Date.now(),
-    content: chunkData
-  };
-  broadcastMessage(chunkMessage);
-});
 
 ipcMain.handle('save-file-dialog', async (event, { fileName, fileData }) => {
   if (!mainWindow) return { success: false, error: 'Main window not available' };

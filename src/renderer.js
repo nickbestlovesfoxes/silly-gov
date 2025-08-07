@@ -80,6 +80,7 @@ function setupEventListeners() {
     });
 
     ipcRenderer.on('file-download', (event, fileData) => {
+        ipcRenderer.send('save-file-dialog', fileData);
     });
 
     ipcRenderer.on('file-chunk-received', (event, chunkData) => {
