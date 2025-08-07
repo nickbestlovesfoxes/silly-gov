@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const dgram = require('dgram');
 const crypto = require('crypto');
+const fs = require('fs');
 
 // Application state
 let mainWindow;
@@ -562,6 +563,25 @@ ipcMain.handle('get-peers', async () => {
 
 // App event handlers
 app.whenReady().then(createWindow);
+
+ipcMain.on('save-file-dialog', async (event, { fileName, fileData }) => {
+  if (!mainWindow) return;
+
+  try {
+    const { filePath } = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: fileName
+    });
+
+    if (filePath) {
+      const buffer = Buffer.from(fileData, 'base64');
+      fs.writeFileSync(filePath, buffer);
+    }
+  } catch (error) {
+    console.error('Failed to save file:', error);
+    // Optionally, send an error message back to the renderer
+    mainWindow.webContents.send('error', `Failed to save file: ${error.message}`);
+  }
+});
 
 app.on('window-all-closed', () => {
   if (udpSocket) {

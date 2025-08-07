@@ -77,7 +77,6 @@ function setupEventListeners() {
     });
 
     ipcRenderer.on('file-download', (event, fileData) => {
-        downloadFile(fileData);
     });
 }
 
@@ -171,7 +170,7 @@ function createFileElement(fileId, fileName, fileSize) {
     
     const textSpan = document.createElement('span');
     textSpan.className = 'file-element-text';
-    textSpan.textContent = `[${fileName}] (${fileSize})`;
+    textSpan.textContent = `${fileName} ${fileSize}`;
     
     fileElement.appendChild(removeBtn);
     fileElement.appendChild(textSpan);
@@ -396,11 +395,14 @@ function addMessageToUI(sender, payload, timestamp, isOwn) {
                     if (file.data) {
                         fileElement.dataset.fileData = file.data;
                     }
-                    fileElement.textContent = `[${escapeHtml(file.name)}] (${fileSize})`;
+                    fileElement.textContent = `${escapeHtml(file.name)} ${fileSize}`;
 
                     fileElement.addEventListener('click', () => {
                         if (fileElement.dataset.fileData) {
-                            downloadFileFromBase64(fileElement.dataset.fileName, fileElement.dataset.fileData);
+                            ipcRenderer.send('save-file-dialog', {
+                                fileName: fileElement.dataset.fileName,
+                                fileData: fileElement.dataset.fileData
+                            });
                         }
                     });
 
@@ -436,35 +438,6 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
-}
-
-// Download file from base64 data
-function downloadFileFromBase64(fileName, base64Data) {
-    try {
-        const binaryString = atob(base64Data);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        
-        const blob = new Blob([bytes]);
-        const url = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    } catch (error) {
-        console.error('Error downloading file:', error);
-    }
-}
-
-// Download file (for IPC events)
-function downloadFile(fileData) {
-    downloadFileFromBase64(fileData.name, fileData.data);
 }
 
 function showStatus(message, type = 'info') {
