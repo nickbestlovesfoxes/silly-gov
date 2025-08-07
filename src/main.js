@@ -205,8 +205,6 @@ function handleMessage(message, rinfo) {
 }
 
 function handleJoinMessage(message, rinfo) {
-  console.log(`${message.displayName} joined from ${rinfo.address}`);
-  
   // Don't automatically send history - let the new peer request it
   // This allows them to choose which peer's history to use
 }
@@ -324,9 +322,11 @@ function broadcastMessage(message) {
   
   const basePort = getPortForRoom(currentRoom);
   
-  // Simplified broadcast strategy
+  // Use multiple broadcast strategies for better coverage
   const addresses = [
     '255.255.255.255', // General broadcast
+    '192.168.1.255',  // Common home network broadcast
+    '192.168.0.255',  // Common home network broadcast
   ];
   
   // Send to known peers directly
