@@ -418,7 +418,7 @@ async function sendMessage() {
 }
 
 function handleFileChunk(chunkData) {
-    const { fileId, chunkIndex, chunkData } = chunkData;
+    const { fileId, chunkIndex } = chunkData;
 
     if (!incomingChunks.has(fileId)) {
         // This shouldn't happen if the main message arrives first, but as a fallback:
