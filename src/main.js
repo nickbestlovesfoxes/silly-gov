@@ -564,8 +564,8 @@ ipcMain.handle('get-peers', async () => {
 // App event handlers
 app.whenReady().then(createWindow);
 
-ipcMain.on('save-file-dialog', async (event, { fileName, fileData }) => {
-  if (!mainWindow) return;
+ipcMain.handle('save-file-dialog', async (event, { fileName, fileData }) => {
+  if (!mainWindow) return { success: false, error: 'Main window not available' };
 
   try {
     const { filePath } = await dialog.showSaveDialog(mainWindow, {
@@ -575,11 +575,16 @@ ipcMain.on('save-file-dialog', async (event, { fileName, fileData }) => {
     if (filePath) {
       const buffer = Buffer.from(fileData, 'base64');
       fs.writeFileSync(filePath, buffer);
+      return { success: true };
+    } else {
+      // User cancelled the save dialog
+      return { success: false, error: 'Save cancelled' };
     }
   } catch (error) {
     console.error('Failed to save file:', error);
     // Optionally, send an error message back to the renderer
     mainWindow.webContents.send('error', `Failed to save file: ${error.message}`);
+    throw error; // Throw error to be caught by the renderer's invoke().catch()
   }
 });
 

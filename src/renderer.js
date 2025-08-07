@@ -397,12 +397,17 @@ function addMessageToUI(sender, payload, timestamp, isOwn) {
                     }
                     fileElement.textContent = `${escapeHtml(file.name)} ${fileSize}`;
 
-                    fileElement.addEventListener('click', () => {
+                    fileElement.addEventListener('click', async () => {
                         if (fileElement.dataset.fileData) {
-                            ipcRenderer.send('save-file-dialog', {
-                                fileName: fileElement.dataset.fileName,
-                                fileData: fileElement.dataset.fileData
-                            });
+                            try {
+                                await ipcRenderer.invoke('save-file-dialog', {
+                                    fileName: fileElement.dataset.fileName,
+                                    fileData: fileElement.dataset.fileData
+                                });
+                            } catch (error) {
+                                console.error('File save error:', error);
+                                // Optionally, show an error to the user
+                            }
                         }
                     });
 
