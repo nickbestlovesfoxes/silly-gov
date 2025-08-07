@@ -212,7 +212,7 @@ function handleChatMessage(message, rinfo) {
   const chatMessage = {
     id: message.messageId,
     sender: message.displayName,
-    text: message.content.text,
+    structure: message.content.structure,
     files: message.content.files || [],
     timestamp: message.timestamp
   };
@@ -480,42 +480,35 @@ ipcMain.handle('send-message', async (event, messageData) => {
   if (!currentRoom || !displayName || !myPeerId) {
     return { success: false, error: 'Not in a room' };
   }
-  
+
   const messageId = generateMessageId();
-  
-  // Handle both old string format and new object format
-  let text, files;
-  if (typeof messageData === 'string') {
-    text = messageData;
-    files = [];
-  } else {
-    text = messageData.text || '';
-    files = messageData.files || [];
-  }
-  
+
+  // New format: { structure: [...], files: [...] }
+  const { structure, files } = messageData;
+
   const chatMessage = {
     type: MESSAGE_TYPES.MESSAGE,
     messageId,
     peerId: myPeerId,
     displayName: displayName,
     timestamp: Date.now(),
-    content: { text, files }
+    content: { structure, files } // new content format
   };
-  
+
   // Add to local messages first
   const localMessage = {
     id: messageId,
     sender: displayName,
-    text,
+    structure, // new property
     files,
     timestamp: chatMessage.timestamp
   };
-  
+
   messages.push(localMessage);
-  
+
   // Broadcast to peers
   broadcastMessage(chatMessage);
-  
+
   return { success: true, message: localMessage };
 });
 

@@ -61,16 +61,14 @@ function setupEventListeners() {
 
     // IPC event listeners
     ipcRenderer.on('new-message', (event, message) => {
-        // Handle both message.content and message.text for compatibility
-        const messageText = message.text || message.content || '';
-        addMessageToUI(message.sender, messageText, message.timestamp, false, message.files);
+        addMessageToUI(message.sender, message, message.timestamp, false);
     });
 
     ipcRenderer.on('history-received', (event, messages) => {
         // Clear existing messages and add history
         chatMessages.innerHTML = '';
         messages.forEach(message => {
-            addMessageToUI(message.sender, message.text || message.content, message.timestamp, message.sender === currentDisplayName, message.files);
+            addMessageToUI(message.sender, message, message.timestamp, message.sender === currentDisplayName);
         });
     });
 
@@ -102,6 +100,18 @@ function autoResizeTextarea() {
     // Not needed for contenteditable div
 }
 
+// Robust ArrayBuffer to Base64 converter
+function arrayBufferToBase64(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+
+
 // Handle file selection
 function handleFileSelection(event) {
     const files = Array.from(event.target.files);
@@ -110,13 +120,14 @@ function handleFileSelection(event) {
         const fileId = generateFileId();
         const fileSize = formatFileSize(file.size);
         
-        // Store file data
+        // Store file data as Base64
         const reader = new FileReader();
         reader.onload = (e) => {
+            const base64Data = arrayBufferToBase64(e.target.result);
             attachedFiles.set(fileId, {
                 name: file.name,
                 size: file.size,
-                data: e.target.result
+                data: base64Data
             });
         };
         reader.readAsArrayBuffer(file);
@@ -285,141 +296,137 @@ async function leaveRoom() {
     }
 }
 
-async function sendMessage() {
-    // Get text content and files
-    const textContent = getTextContent();
-    const messageFiles = getAttachedFiles();
-    
-    if (!textContent.trim() && messageFiles.length === 0) return;
-    
-    if (!isInRoom) {
-        return;
+function getMessagePayload() {
+    const structure = [];
+    const filesToSend = new Map();
+
+    for (const node of messageInput.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent;
+            if (text) {
+                structure.push({ type: 'text', content: text });
+            }
+        } else if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('file-element')) {
+            const fileId = node.dataset.fileId;
+            if (fileId && attachedFiles.has(fileId)) {
+                structure.push({ type: 'file', id: fileId });
+                if (!filesToSend.has(fileId)) {
+                    const fileData = attachedFiles.get(fileId);
+                    filesToSend.set(fileId, {
+                        id: fileId,
+                        name: fileData.name,
+                        size: fileData.size,
+                        data: fileData.data
+                    });
+                }
+            }
+        }
     }
 
-    // Store message locally first (optimistic UI)
+    // Trim leading/trailing whitespace text nodes
+    if (structure.length > 0 && structure[0].type === 'text') {
+        structure[0].content = structure[0].content.trimStart();
+    }
+    if (structure.length > 0 && structure[structure.length - 1].type === 'text') {
+        structure[structure.length - 1].content = structure[structure.length - 1].content.trimEnd();
+    }
+
+    return {
+        structure: structure.filter(item => item.type !== 'text' || item.content), // remove empty text nodes
+        files: Array.from(filesToSend.values())
+    };
+}
+
+async function sendMessage() {
+    const payload = getMessagePayload();
+
+    if (payload.structure.length === 0) return;
+    if (!isInRoom) return;
+
     const tempContent = messageInput.innerHTML;
-    const tempFiles = [...messageFiles];
-    
-    // Clear input
+    const tempAttachedFiles = new Map(attachedFiles);
+
     messageInput.innerHTML = '';
     attachedFiles.clear();
-    sendBtn.disabled = true;
 
     try {
-        const result = await ipcRenderer.invoke('send-message', {
-            text: textContent,
-            files: tempFiles
-        });
-        
+        sendBtn.disabled = true;
+        const result = await ipcRenderer.invoke('send-message', payload);
+
         if (result.success) {
-            // Add the message to UI immediately (local echo)
-            addMessageToUI(currentDisplayName, textContent, Date.now(), true, tempFiles);
+            addMessageToUI(currentDisplayName, payload, Date.now(), true);
         } else {
-            // Restore message on failure
             messageInput.innerHTML = tempContent;
-            tempFiles.forEach(file => {
-                attachedFiles.set(file.id, {
-                    name: file.name,
-                    size: file.size,
-                    data: file.data
-                });
-            });
+            attachedFiles = tempAttachedFiles;
         }
     } catch (error) {
         console.error('Error sending message:', error);
-        // Restore message on error
         messageInput.innerHTML = tempContent;
-        tempFiles.forEach(file => {
-            attachedFiles.set(file.id, {
-                name: file.name,
-                size: file.size,
-                data: file.data
-            });
-        });
+        attachedFiles = tempAttachedFiles;
     } finally {
         sendBtn.disabled = false;
         messageInput.focus();
     }
 }
 
-// Get text content from contenteditable div
-function getTextContent() {
-    const clone = messageInput.cloneNode(true);
-    // Remove file elements for text extraction
-    const fileElements = clone.querySelectorAll('.file-element');
-    fileElements.forEach(el => el.remove());
-    return clone.textContent || '';
-}
-
-// Get attached files for sending
-function getAttachedFiles() {
-    const files = [];
-    const fileElements = messageInput.querySelectorAll('.file-element');
-    
-    fileElements.forEach(element => {
-        const fileId = element.dataset.fileId;
-        const fileData = attachedFiles.get(fileId);
-        if (fileData) {
-            files.push({
-                id: fileId,
-                name: fileData.name,
-                size: fileData.size,
-                data: fileData.data
-            });
-        }
-    });
-    
-    return files;
-}
-
-// Add message to UI with Discord-style layout
-function addMessageToUI(sender, text, timestamp, isOwn, files = []) {
+function addMessageToUI(sender, payload, timestamp, isOwn) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isOwn ? 'own' : ''}`;
-    
+
     const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const displayName = sender || 'Anonymous';
-    
-    // Create message content with text and files
-    let messageContent = '';
-    
-    // Add text if present
-    if (text && text.trim()) {
-        messageContent += `<span class="message-text">${escapeHtml(text)}</span>`;
-    }
-    
-    // Add files if present
-    if (files && files.length > 0) {
-        const fileElements = files.map(file => {
-            const fileSize = typeof file.size === 'number' ? formatFileSize(file.size) : file.size;
-            return `<span class="file-element clickable-file" data-file-id="${file.id}" data-file-name="${escapeHtml(file.name)}" data-file-data="${file.data ? btoa(String.fromCharCode(...new Uint8Array(file.data))) : ''}">[${escapeHtml(file.name)}] (${fileSize})</span>`;
-        }).join(' ');
-        
-        if (messageContent) {
-            messageContent += ' ' + fileElements;
-        } else {
-            messageContent = fileElements;
-        }
-    }
-    
-    messageDiv.innerHTML = `
-        <span class="message-time">${time}</span>
-        <span class="message-author">${escapeHtml(displayName)}</span>
-        <span class="message-content">${messageContent}</span>
-    `;
-    
-    // Add click handlers for file downloads
-    const clickableFiles = messageDiv.querySelectorAll('.clickable-file');
-    clickableFiles.forEach(fileElement => {
-        fileElement.addEventListener('click', () => {
-            const fileName = fileElement.dataset.fileName;
-            const fileData = fileElement.dataset.fileData;
-            if (fileData) {
-                downloadFileFromBase64(fileName, fileData);
+
+    const messageContentSpan = document.createElement('span');
+    messageContentSpan.className = 'message-content';
+
+    const filesMap = new Map((payload.files || []).map(f => [f.id, f]));
+
+    if (payload.structure && payload.structure.length > 0) {
+        payload.structure.forEach(item => {
+            if (item.type === 'text') {
+                messageContentSpan.appendChild(document.createTextNode(item.content));
+            } else if (item.type === 'file') {
+                const file = filesMap.get(item.id);
+                if (file) {
+                    const fileSize = typeof file.size === 'number' ? formatFileSize(file.size) : file.size;
+                    const fileElement = document.createElement('span');
+                    fileElement.className = 'file-element clickable-file';
+                    fileElement.dataset.fileId = file.id;
+                    fileElement.dataset.fileName = escapeHtml(file.name);
+                    if (file.data) {
+                        fileElement.dataset.fileData = file.data;
+                    }
+                    fileElement.textContent = `[${escapeHtml(file.name)}] (${fileSize})`;
+
+                    fileElement.addEventListener('click', () => {
+                        if (fileElement.dataset.fileData) {
+                            downloadFileFromBase64(fileElement.dataset.fileName, fileElement.dataset.fileData);
+                        }
+                    });
+
+                    messageContentSpan.appendChild(fileElement);
+                }
             }
         });
-    });
+    } else if (payload.text) { // Fallback for old format if needed
+        const textSpan = document.createElement('span');
+        textSpan.className = 'message-text';
+        textSpan.textContent = payload.text;
+        messageContentSpan.appendChild(textSpan);
+    }
     
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'message-time';
+    timeSpan.textContent = time;
+
+    const authorSpan = document.createElement('span');
+    authorSpan.className = 'message-author';
+    authorSpan.textContent = escapeHtml(displayName);
+
+    messageDiv.appendChild(timeSpan);
+    messageDiv.appendChild(authorSpan);
+    messageDiv.appendChild(messageContentSpan);
+
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
