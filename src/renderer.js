@@ -17,9 +17,12 @@ const filePickerBtn = document.getElementById('file-picker-btn');
 const fileInput = document.getElementById('file-input');
 
 // Application state
+const CHUNK_SIZE = 60000; // 60KB
 let currentDisplayName = '';
 let isInRoom = false;
 let attachedFiles = new Map(); // fileId -> { name, size, data }
+let incomingChunks = new Map(); // fileId -> { name, size, totalChunks, chunks[] }
+
 
 // Initialize the application
 function init() {
@@ -77,6 +80,10 @@ function setupEventListeners() {
     });
 
     ipcRenderer.on('file-download', (event, fileData) => {
+    });
+
+    ipcRenderer.on('file-chunk-received', (event, chunkData) => {
+        handleFileChunk(chunkData);
     });
 }
 
@@ -359,15 +366,42 @@ async function sendMessage() {
     const tempContent = messageInput.innerHTML;
     const tempAttachedFiles = new Map(attachedFiles);
 
+    // Create a version of the payload without the large file data
+    const messagePayload = {
+        structure: payload.structure,
+        files: payload.files.map(file => ({
+            id: file.id,
+            name: file.name,
+            size: file.size,
+            totalChunks: Math.ceil(file.data.length / CHUNK_SIZE)
+        }))
+    };
+
     messageInput.innerHTML = '';
     attachedFiles.clear();
 
     try {
         sendBtn.disabled = true;
-        const result = await ipcRenderer.invoke('send-message', payload);
+        const result = await ipcRenderer.invoke('send-message', messagePayload);
 
         if (result.success) {
-            addMessageToUI(currentDisplayName, payload, Date.now(), true);
+            // Add message to UI immediately (without file data)
+            addMessageToUI(currentDisplayName, messagePayload, Date.now(), true);
+
+            // Now, send the file chunks
+            for (const file of payload.files) {
+                const totalChunks = Math.ceil(file.data.length / CHUNK_SIZE);
+                for (let i = 0; i < totalChunks; i++) {
+                    const chunk = file.data.substring(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+                    ipcRenderer.send('send-file-chunk', {
+                        fileId: file.id,
+                        chunkIndex: i,
+                        chunkData: chunk
+                    });
+                    // Small delay to avoid flooding the main process
+                    await new Promise(resolve => setTimeout(resolve, 5));
+                }
+            }
         } else {
             messageInput.innerHTML = tempContent;
             attachedFiles = tempAttachedFiles;
@@ -379,6 +413,33 @@ async function sendMessage() {
     } finally {
         sendBtn.disabled = false;
         messageInput.focus();
+    }
+}
+
+function handleFileChunk(chunkData) {
+    const { fileId, chunkIndex, chunkData } = chunkData;
+
+    if (!incomingChunks.has(fileId)) {
+        // This shouldn't happen if the main message arrives first, but as a fallback:
+        console.error(`Received chunk for unknown fileId: ${fileId}`);
+        return;
+    }
+
+    const file = incomingChunks.get(fileId);
+    file.chunks[chunkIndex] = chunkData;
+
+    // Check if all chunks have arrived
+    if (file.chunks.filter(c => c).length === file.totalChunks) {
+        const fileData = file.chunks.join('');
+        incomingChunks.delete(fileId);
+
+        // Update the file element in the DOM
+        const fileElement = document.querySelector(`[data-file-id="${fileId}"]`);
+        if (fileElement) {
+            fileElement.dataset.fileData = fileData;
+            // Maybe add a visual indicator that the file is ready
+            fileElement.style.borderColor = '#4CAF50'; // Green border
+        }
     }
 }
 
@@ -406,8 +467,21 @@ function addMessageToUI(sender, payload, timestamp, isOwn) {
                     fileElement.className = 'file-element clickable-file';
                     fileElement.dataset.fileId = file.id;
                     fileElement.dataset.fileName = escapeHtml(file.name);
-                    if (file.data) {
-                        fileElement.dataset.fileData = file.data;
+
+                    // If the message is from another user, store metadata for chunk reassembly
+                    if (!isOwn) {
+                        incomingChunks.set(file.id, {
+                            name: file.name,
+                            size: file.size,
+                            totalChunks: file.totalChunks,
+                            chunks: new Array(file.totalChunks)
+                        });
+                    } else {
+                        // For our own message, the data is already available
+                        const originalFile = attachedFiles.get(file.id) || tempAttachedFiles.get(file.id);
+                        if (originalFile) {
+                            fileElement.dataset.fileData = originalFile.data;
+                        }
                     }
 
                     const fileNameSpan = document.createElement('span');
@@ -430,8 +504,10 @@ function addMessageToUI(sender, payload, timestamp, isOwn) {
                                 });
                             } catch (error) {
                                 console.error('File save error:', error);
-                                // Optionally, show an error to the user
                             }
+                        } else {
+                            // File not ready yet
+                            showStatus('File is still downloading...', 'info');
                         }
                     });
 
