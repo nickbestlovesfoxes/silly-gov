@@ -170,10 +170,15 @@ function createFileElement(fileId, fileName, fileSize) {
     
     const textSpan = document.createElement('span');
     textSpan.className = 'file-element-text';
-    textSpan.textContent = `${fileName} ${fileSize}`;
+    textSpan.textContent = fileName;
+
+    const sizeSpan = document.createElement('span');
+    sizeSpan.className = 'file-size';
+    sizeSpan.textContent = fileSize;
     
     fileElement.appendChild(removeBtn);
     fileElement.appendChild(textSpan);
+    fileElement.appendChild(sizeSpan);
     
     // Insert at cursor position
     insertAtCursor(fileElement);
@@ -395,7 +400,16 @@ function addMessageToUI(sender, payload, timestamp, isOwn) {
                     if (file.data) {
                         fileElement.dataset.fileData = file.data;
                     }
-                    fileElement.textContent = `${escapeHtml(file.name)} ${fileSize}`;
+
+                    const fileNameSpan = document.createElement('span');
+                    fileNameSpan.textContent = escapeHtml(file.name);
+
+                    const fileSizeSpan = document.createElement('span');
+                    fileSizeSpan.className = 'file-size';
+                    fileSizeSpan.textContent = fileSize;
+
+                    fileElement.appendChild(fileNameSpan);
+                    fileElement.appendChild(fileSizeSpan);
 
                     fileElement.addEventListener('click', async () => {
                         if (fileElement.dataset.fileData) {
