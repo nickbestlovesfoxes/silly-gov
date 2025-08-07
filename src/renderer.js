@@ -111,28 +111,38 @@ function arrayBufferToBase64(buffer) {
 }
 
 
+// Promisified file reader
+function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            resolve(arrayBufferToBase64(reader.result));
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+    });
+}
+
 // Handle file selection
-function handleFileSelection(event) {
+async function handleFileSelection(event) {
     const files = Array.from(event.target.files);
     
-    files.forEach(file => {
+    for (const file of files) {
         const fileId = generateFileId();
-        const fileSize = formatFileSize(file.size);
         
-        // Store file data as Base64 and then create the element
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const base64Data = arrayBufferToBase64(e.target.result);
+        try {
+            const base64Data = await readFileAsBase64(file);
             attachedFiles.set(fileId, {
                 name: file.name,
                 size: file.size,
                 data: base64Data
             });
-            // Create file element AFTER file is read
-            createFileElement(fileId, file.name, fileSize);
-        };
-        reader.readAsArrayBuffer(file);
-    });
+            createFileElement(fileId, file.name, formatFileSize(file.size));
+        } catch (error) {
+            console.error("Error reading file:", error);
+            // Optionally, show an error to the user
+        }
+    }
     
     // Clear the file input
     fileInput.value = '';
