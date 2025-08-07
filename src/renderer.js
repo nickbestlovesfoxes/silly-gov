@@ -386,7 +386,7 @@ async function sendMessage() {
 
         if (result.success) {
             // Add message to UI immediately (without file data)
-            addMessageToUI(currentDisplayName, messagePayload, Date.now(), true);
+            addMessageToUI(currentDisplayName, messagePayload, Date.now(), true, tempAttachedFiles);
 
             // Now, send the file chunks
             for (const file of payload.files) {
@@ -443,7 +443,7 @@ function handleFileChunk(chunkData) {
     }
 }
 
-function addMessageToUI(sender, payload, timestamp, isOwn) {
+function addMessageToUI(sender, payload, timestamp, isOwn, tempAttachedFiles = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isOwn ? 'own' : ''}`;
 
@@ -478,7 +478,8 @@ function addMessageToUI(sender, payload, timestamp, isOwn) {
                         });
                     } else {
                         // For our own message, the data is already available
-                        const originalFile = attachedFiles.get(file.id) || tempAttachedFiles.get(file.id);
+                        const fileMap = tempAttachedFiles || attachedFiles;
+                        const originalFile = fileMap.get(file.id);
                         if (originalFile) {
                             fileElement.dataset.fileData = originalFile.data;
                         }
