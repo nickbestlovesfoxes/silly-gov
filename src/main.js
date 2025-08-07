@@ -35,6 +35,7 @@ const MESSAGE_TYPES = {
 };
 
 function createWindow() {
+  app.disableHardwareAcceleration();
   mainWindow = new BrowserWindow({
     width: 1000,
     height: 700,
@@ -321,30 +322,21 @@ function broadcastMessage(message) {
   
   const basePort = getPortForRoom(currentRoom);
   
-  // Use multiple broadcast strategies for better coverage
+  // Simplified broadcast strategy
   const addresses = [
-    '127.0.0.1',      // localhost
-    '192.168.1.255',  // common home network broadcast
-    '192.168.0.255',  // common home network broadcast  
-    '10.0.0.255',     // corporate networks
-    '172.16.255.255'  // private network range
+    '255.255.255.255', // General broadcast
   ];
   
-  // Send to fewer ports to reduce duplicates (base port + 1 backup)
-  const portRange = [basePort, basePort + 1];
-  
-  // Send to known peers directly (single port)
+  // Send to known peers directly
   peers.forEach((peer, peerId) => {
     if (peerId !== myPeerId) {
-      sendMessage(message, peer.address, basePort);
+      sendMessage(message, peer.address, peer.port);
     }
   });
   
-  // Send to broadcast addresses on limited ports
+  // Send to broadcast addresses
   addresses.forEach(address => {
-    portRange.forEach(port => {
-      sendMessage(message, address, port);
-    });
+    sendMessage(message, address, basePort);
   });
 }
 
