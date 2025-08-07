@@ -29,7 +29,6 @@ const MESSAGE_TYPES = {
   MESSAGE: 'message',
   FILE_CHUNK: 'file_chunk',
   ACK: 'ack',
-  HISTORY: 'history',
   HISTORY_REQUEST: 'history_request',
   STATUS_REQUEST: 'status_request',
   LEAVE: 'leave'
@@ -191,9 +190,6 @@ function handleMessage(message, rinfo) {
     case MESSAGE_TYPES.ACK:
       handleAckMessage(message);
       break;
-    case MESSAGE_TYPES.HISTORY:
-      handleHistoryMessage(message);
-      break;
     case MESSAGE_TYPES.HISTORY_REQUEST:
       handleHistoryRequest(message, rinfo);
       break;
@@ -237,20 +233,44 @@ function handleAckMessage(message) {
   // ACK handling removed for simplicity
 }
 
-function handleHistoryMessage(message) {
-  // Only accept the first history response to avoid conflicts
-  if (!historyReceived && message.content.history) {
-    historyReceived = true;
-    messages = [...message.content.history];
-    mainWindow.webContents.send('history-received', messages);
-    console.log(`Received chat history from ${message.displayName} (${message.content.history.length} messages)`);
-  }
-}
-
 function handleHistoryRequest(message, rinfo) {
-  // Send our chat history to the requesting peer
-  if (messages.length > 0) {
-    sendHistoryToPeer(message.peerId, rinfo);
+  // Send our chat history to the requesting peer, one message at a time
+  for (const msg of messages) {
+    const historyMessage = {
+      type: MESSAGE_TYPES.MESSAGE,
+      messageId: msg.id,
+      peerId: myPeerId,
+      displayName: msg.sender,
+      timestamp: msg.timestamp,
+      content: {
+        structure: msg.structure,
+        files: msg.files.map(f => ({ id: f.id, name: f.name, size: f.size })) // send metadata only
+      }
+    };
+    sendMessage(historyMessage, rinfo.address, rinfo.port);
+
+    // If there are files, send them in chunks
+    for (const file of msg.files) {
+      if (file.data) {
+        const totalChunks = Math.ceil(file.data.length / 60000); // Use a fixed chunk size
+        for (let i = 0; i < totalChunks; i++) {
+          const chunk = file.data.substring(i * 60000, (i + 1) * 60000);
+          const chunkMessage = {
+            type: MESSAGE_TYPES.FILE_CHUNK,
+            messageId: generateMessageId(),
+            peerId: myPeerId,
+            displayName: displayName,
+            timestamp: Date.now(),
+            content: {
+              fileId: file.id,
+              chunkIndex: i,
+              chunkData: chunk
+            }
+          };
+          sendMessage(chunkMessage, rinfo.address, rinfo.port);
+        }
+      }
+    }
   }
 }
 
@@ -262,19 +282,6 @@ function handleLeaveMessage(message) {
   if (peers.has(message.peerId)) {
     peers.delete(message.peerId);
   }
-}
-
-function sendHistoryToPeer(peerId, rinfo) {
-  const historyMessage = {
-    type: MESSAGE_TYPES.HISTORY,
-    messageId: generateMessageId(),
-    peerId: myPeerId,
-    displayName: displayName,
-    timestamp: Date.now(),
-    content: { history: messages }
-  };
-  
-  sendMessage(historyMessage, rinfo.address, rinfo.port);
 }
 
 function requestChatHistory() {

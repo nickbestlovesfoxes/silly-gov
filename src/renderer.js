@@ -67,14 +67,6 @@ function setupEventListeners() {
         addMessageToUI(message.sender, message, message.timestamp, false);
     });
 
-    ipcRenderer.on('history-received', (event, messages) => {
-        // Clear existing messages and add history
-        chatMessages.innerHTML = '';
-        messages.forEach(message => {
-            addMessageToUI(message.sender, message, message.timestamp, message.sender === currentDisplayName);
-        });
-    });
-
     ipcRenderer.on('error', (event, errorMessage) => {
         showStatus(errorMessage, 'error');
     });
