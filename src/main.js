@@ -4,6 +4,8 @@ const dgram = require('dgram');
 const crypto = require('crypto');
 const fs = require('fs');
 
+app.disableHardwareAcceleration();
+
 // Application state
 let mainWindow;
 let udpSocket;
@@ -35,7 +37,6 @@ const MESSAGE_TYPES = {
 };
 
 function createWindow() {
-  app.disableHardwareAcceleration();
   mainWindow = new BrowserWindow({
     width: 1000,
     height: 700,
