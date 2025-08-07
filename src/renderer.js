@@ -192,8 +192,8 @@ function createFileElement(fileId, fileName, fileSize) {
     // Insert at cursor position
     insertAtCursor(fileElement);
     
-    // Add space after file element
-    const space = document.createTextNode(' ');
+    // Add a non-breaking space after the file element to ensure the cursor is placed correctly
+    const space = document.createTextNode('\u00A0');
     insertAtCursor(space);
     
     messageInput.focus();
