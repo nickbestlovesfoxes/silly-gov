@@ -17,7 +17,7 @@ const filePickerBtn = document.getElementById('file-picker-btn');
 const fileInput = document.getElementById('file-input');
 
 // Application state
-const CHUNK_SIZE = 60000; // 60KB
+const CHUNK_SIZE = 28000; // 28KB, a safe size for UDP packets after overhead
 let currentDisplayName = '';
 let isInRoom = false;
 let attachedFiles = new Map(); // fileId -> { name, size, data }
