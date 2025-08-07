@@ -295,7 +295,8 @@ function requestChatHistory() {
   };
   
   console.log('Requesting chat history from peers...');
-  broadcastMessage(historyRequestMessage);
+  // Send to the general broadcast address on the specific port
+  sendMessage(historyRequestMessage, '255.255.255.255', getPortForRoom(currentRoom));
 }
 
 function sendMessage(message, address, port) {
