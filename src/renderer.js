@@ -392,7 +392,7 @@ async function sendMessage() {
                         chunkData: chunk
                     });
                     // Small delay to avoid flooding the main process
-                    await new Promise(resolve => setTimeout(resolve, 5));
+                    await new Promise(resolve => setTimeout(resolve, 10));
                 }
             }
         } else {

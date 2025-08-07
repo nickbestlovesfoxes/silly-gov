@@ -236,6 +236,13 @@ function handleAckMessage(message) {
 function handleHistoryRequest(message, rinfo) {
   // Send our chat history to the requesting peer, one message at a time
   for (const msg of messages) {
+    const filesMetadata = msg.files.map(f => ({
+      id: f.id,
+      name: f.name,
+      size: f.size,
+      totalChunks: f.data ? Math.ceil(f.data.length / 28000) : 0
+    }));
+
     const historyMessage = {
       type: MESSAGE_TYPES.MESSAGE,
       messageId: msg.id,
@@ -244,7 +251,7 @@ function handleHistoryRequest(message, rinfo) {
       timestamp: msg.timestamp,
       content: {
         structure: msg.structure,
-        files: msg.files.map(f => ({ id: f.id, name: f.name, size: f.size })) // send metadata only
+        files: filesMetadata
       }
     };
     sendMessage(historyMessage, rinfo.address, rinfo.port);
@@ -252,9 +259,9 @@ function handleHistoryRequest(message, rinfo) {
     // If there are files, send them in chunks
     for (const file of msg.files) {
       if (file.data) {
-        const totalChunks = Math.ceil(file.data.length / 60000); // Use a fixed chunk size
+        const totalChunks = Math.ceil(file.data.length / 28000); // Use a fixed chunk size
         for (let i = 0; i < totalChunks; i++) {
-          const chunk = file.data.substring(i * 60000, (i + 1) * 60000);
+          const chunk = file.data.substring(i * 28000, (i + 1) * 28000);
           const chunkMessage = {
             type: MESSAGE_TYPES.FILE_CHUNK,
             messageId: generateMessageId(),
