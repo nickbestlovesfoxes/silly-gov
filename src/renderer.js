@@ -410,28 +410,29 @@ async function sendMessage() {
 }
 
 function handleFileChunk(chunkData) {
-    const { fileId, chunkIndex } = chunkData;
+    const { fileId, chunkIndex, chunkData: chunkString } = chunkData;
 
     if (!incomingChunks.has(fileId)) {
-        // This shouldn't happen if the main message arrives first, but as a fallback:
         console.error(`Received chunk for unknown fileId: ${fileId}`);
         return;
     }
 
     const file = incomingChunks.get(fileId);
-    file.chunks[chunkIndex] = chunkData;
+    file.chunks[chunkIndex] = chunkString;
 
-    // Check if all chunks have arrived
-    if (file.chunks.filter(c => c).length === file.totalChunks) {
-        const fileData = file.chunks.join('');
-        incomingChunks.delete(fileId);
+    const receivedChunks = file.chunks.filter(c => c).length;
+    const progress = receivedChunks / file.totalChunks;
+    const fileElement = document.querySelector(`[data-file-id="${fileId}"]`);
 
-        // Update the file element in the DOM
-        const fileElement = document.querySelector(`[data-file-id="${fileId}"]`);
-        if (fileElement) {
+    if (fileElement) {
+        if (progress >= 0.2) {
+            fileElement.classList.remove('file-uploading');
+        }
+        if (progress === 1) {
+            const fileData = file.chunks.join('');
+            incomingChunks.delete(fileId);
             fileElement.dataset.fileData = fileData;
-            // Maybe add a visual indicator that the file is ready
-            fileElement.style.borderColor = '#4CAF50'; // Green border
+            fileElement.classList.add('file-done');
         }
     }
 }
@@ -461,8 +462,8 @@ function addMessageToUI(sender, payload, timestamp, isOwn, tempAttachedFiles = n
                     fileElement.dataset.fileId = file.id;
                     fileElement.dataset.fileName = escapeHtml(file.name);
 
-                    // If the message is from another user, store metadata for chunk reassembly
                     if (!isOwn) {
+                        fileElement.classList.add('file-uploading');
                         incomingChunks.set(file.id, {
                             name: file.name,
                             size: file.size,
@@ -470,11 +471,11 @@ function addMessageToUI(sender, payload, timestamp, isOwn, tempAttachedFiles = n
                             chunks: new Array(file.totalChunks)
                         });
                     } else {
-                        // For our own message, the data is already available
                         const fileMap = tempAttachedFiles || attachedFiles;
                         const originalFile = fileMap.get(file.id);
                         if (originalFile) {
                             fileElement.dataset.fileData = originalFile.data;
+                            fileElement.classList.add('file-done');
                         }
                     }
 
@@ -500,7 +501,6 @@ function addMessageToUI(sender, payload, timestamp, isOwn, tempAttachedFiles = n
                                 console.error('File save error:', error);
                             }
                         } else {
-                            // File not ready yet
                             showStatus('File is still downloading...', 'info');
                         }
                     });
